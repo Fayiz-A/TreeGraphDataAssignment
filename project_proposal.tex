@@ -2,9 +2,10 @@
 \usepackage{amsmath}
 \usepackage[utf8]{inputenc}
 \usepackage[margin=0.75in]{geometry}
+\usepackage{url}
 
 \title{CSC111 Project Proposal: TODO FILL IN YOUR PROJECT TITLE HERE}
-\author{TODO: FILL IN ALL GROUP MEMBER NAMES HERE}
+\author{Khalid Alshikhmubarak}
 \date{\today}
 
 \begin{document}
@@ -16,11 +17,25 @@ TODO
 
 \section*{Computational Plan}
 
-TODO
+The road network will be represented as a weighted undirected graph, where each node represents an intersection or road endpoint in Pennsylvania, and each edge represents a road segment connecting two of those points with a weight representing the distance between them. This graph structure directly models the road network because roads inherently connect two points, and removing an edge in the graph mirrors a real-world road closure — allowing us to analyze how connectivity between intersections changes. \\
+
+\par
+
+The dataset used is the Pennsylvania Road Network from the Stanford Network Analysis Project (SNAP), available at \url{snap.stanford.edu/data/roadNet-PA.html}. It contains 1,088,092 nodes and 1,541,898 edges. The file stores each road connection as two node IDs on one line, separated by a tab, representing a road between two intersections. For example:
+\begin{verbatim}
+0    1
+0    6309
+0    6353
+\end{verbatim}
+This shows that intersection 0 directly connects to intersections 1, 6309, and 6353.\\
+
+\par
+
+The graph will be displayed using pygame, where nodes appear as dots and edges appear as lines. The user can click on an edge to simulate removing that road. Once removed, Dijkstra's algorithm computes the shortest alternate path between the two nodes that road previously connected, and highlights it on the screen in a distinct color. If no path exists, the program displays a message indicating those two nodes are now disconnected, meaning the removed road was critical to the network.
 
 \section*{References}
 
-TODO
+Leskovec, Jure, and Andrej Krevl. "SNAP Datasets: Stanford Large Network Dataset Collection." SNAP, June 2014, snap.stanford.edu/data.
 
 % NOTE: LaTeX does have a built-in way of generating references automatically,
 % but it's a bit tricky to use so you are allowed to write your references manually
@@ -28,3 +43,4 @@ TODO
 % See project proposal handout for details.
 
 \end{document}
+

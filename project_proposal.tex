@@ -3,8 +3,8 @@
 \usepackage[utf8]{inputenc}
 \usepackage[margin=0.75in]{geometry}
 
-\title{CSC111 Project Proposal: TODO FILL IN YOUR PROJECT TITLE HERE}
-\author{TODO: FILL IN ALL GROUP MEMBER NAMES HERE}
+\title{CSC111 Project Proposal: Khalid, Fayiz Ali}
+\author{Khalid Alshikhmubarak, Elias Mohammed A Alhazzaa, Fayiz Ali}
 \date{\today}
 
 \begin{document}
@@ -18,18 +18,18 @@ TODO
 
 Types of computations to perform on the data:
 
-1. Display the graph representation of roads
+1. Display a graph representation of road network using pygame.
 
-2. Make a road removable, and use Djiktras algorithm to compute the length of shortest path between point A and
-point B that the removed single road had connected previously. Djiktras is used to give the shortest path from one
-source node/vertex to all other ones, and it has a time complexity of Theta(V+E(LogV)), so it is best suited to solve
-the problem efficiently for the data.
+2. Make a road removable, and use Dijktra's algorithm to compute the length of shortest path between point A and
+point B that the removed single road had connected previously. Dijktra's algorithm is used to give the shortest path from one
+source vertex to all other ones, and it has a time complexity of $\Theta((V+E)LogV)$ where $E$ is the number of edges (roads) and $V$ is the number of vertices (intersections/road start/end point), so it is best suited to solve
+the problem efficiently for this data (GeeksforGeeks).
 
-3. Using the same algorithm as above, display the shortest path, and in case of a tie show one of the shortest paths.
+3. Using the same algorithm as above, build a collection of the shortest path and highlight this shortest path in the graph, and in case of a tie, show one of the shortest paths in the graph.
 
 \section*{References}
 
-TODO
+GeeksforGeeks. “Dijkstra’s Algorithm to Find Shortest Paths from a Source to All.” GeeksforGeeks, 25 Nov. 2012, www.geeksforgeeks.org/dsa/dijkstras-shortest-path-algorithm-greedy-algo-7/.
 
 % NOTE: LaTeX does have a built-in way of generating references automatically,
 % but it's a bit tricky to use so you are allowed to write your references manually

@@ -2,10 +2,9 @@
 \usepackage{amsmath}
 \usepackage[utf8]{inputenc}
 \usepackage[margin=0.75in]{geometry}
-\usepackage{url}
 
 \title{CSC111 Project Proposal: TODO FILL IN YOUR PROJECT TITLE HERE}
-\author{Khalid Alshikhmubarak}
+\author{Khalid Alshikhmubarak, Elias Mohammed A Alhazzaa, Fayiz Ali}
 \date{\today}
 
 \begin{document}
@@ -17,11 +16,11 @@ TODO
 
 \section*{Computational Plan}
 
-The road network will be represented as a weighted undirected graph, where each node represents an intersection or road endpoint in Pennsylvania, and each edge represents a road segment connecting two of those points with a weight representing the distance between them. This graph structure directly models the road network because roads inherently connect two points, and removing an edge in the graph mirrors a real-world road closure — allowing us to analyze how connectivity between intersections changes. \\
+The road network will be represented as a weighted directed graph, where each node represents an intersection or road endpoint in Ontario, and each edge represents a road segment connecting two of those nodes with a weight representing the distance between them. This graph structure directly models the road network because roads inherently connect two points, and removing an edge in the graph mirrors a real-world road/segment of road closure: allowing us to analyze which road (next shortest path) that closure would lead the motorists to take. \\
 
 \par
 
-The dataset used is the Pennsylvania Road Network from the Stanford Network Analysis Project (SNAP), available at \url{snap.stanford.edu/data/roadNet-PA.html}. It contains 1,088,092 nodes and 1,541,898 edges. The file stores each road connection as two node IDs on one line, separated by a tab, representing a road between two intersections. For example:
+The dataset used is the Ontario Road Network from the Government of Ontario, available at \url{https://geohub.lio.gov.on.ca/datasets/mnrf::ontario-road-network-orn-road-net-element/about}. It contains 1,088,092 nodes and 1,541,898 edges. The file stores each road connection as two node IDs on one line, separated by a tab, representing a road between two intersections. For example:
 \begin{verbatim}
 0    1
 0    6309
@@ -31,16 +30,22 @@ This shows that intersection 0 directly connects to intersections 1, 6309, and 6
 
 \par
 
-The graph will be displayed using pygame, where nodes appear as dots and edges appear as lines. The user can click on an edge to simulate removing that road. Once removed, Dijkstra's algorithm computes the shortest alternate path between the two nodes that road previously connected, and highlights it on the screen in a distinct color. If no path exists, the program displays a message indicating those two nodes are now disconnected, meaning the removed road was critical to the network.
+The graph will be displayed using pygame, where nodes appear as dots and edges appear as lines. The user can click on an edge to simulate removing that road/road segment. Once removed, Dijkstra's algorithm computes the shortest path between the two nodes that road previously connected, and highlights it on the screen in a distinct color. If no path exists, the program displays a message indicating those two nodes are now disconnected, meaning the removed road was critical to the network.
+
+Types of computations to perform on the data:
+
+1. Display a graph representation of road network using pygame.
+
+2. Make a road removable, and use Dijktra's algorithm to compute the length of shortest path between point A and
+point B that the removed single road had connected previously. Dijktra's algorithm is used to give the shortest path from one
+source vertex to all other ones, and it has a time complexity of $\Theta((V+E)LogV)$ where $E$ is the number of edges (roads) and $V$ is the number of vertices (intersections/road start/end point), so it is best suited to solve
+the problem efficiently for this data (GeeksforGeeks).
+
+3. Using the same algorithm as above, build a collection of the shortest path and highlight this shortest path in the graph, and in case of a tie, show one of the shortest paths in the graph.
 
 \section*{References}
 
-Leskovec, Jure, and Andrej Krevl. "SNAP Datasets: Stanford Large Network Dataset Collection." SNAP, June 2014, snap.stanford.edu/data.
+GeeksforGeeks. “Dijkstra’s Algorithm to Find Shortest Paths from a Source to All.” GeeksforGeeks, 25 Nov. 2012, www.geeksforgeeks.org/dsa/dijkstras-shortest-path-algorithm-greedy-algo-7/.
 
-% NOTE: LaTeX does have a built-in way of generating references automatically,
-% but it's a bit tricky to use so you are allowed to write your references manually
-% using a standard academic format like MLA or IEEE.
-% See project proposal handout for details.
-
+https://geohub.lio.gov.on.ca/datasets/mnrf::ontario-road-network-orn-road-net-element/about
 \end{document}
-

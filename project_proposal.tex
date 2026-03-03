@@ -1,7 +1,9 @@
 \documentclass[fontsize=11pt]{article}
 \usepackage{amsmath}
+\usepackage{url}
 \usepackage[utf8]{inputenc}
 \usepackage[margin=0.75in]{geometry}
+\usepackage{setspace}
 
 \title{CSC111 Project Proposal: TODO FILL IN YOUR PROJECT TITLE HERE}
 \author{Khalid Alshikhmubarak, Elias Mohammed A Alhazzaa, Fayiz Ali}
@@ -16,36 +18,136 @@ TODO
 
 \section*{Computational Plan}
 
-The road network will be represented as a weighted directed graph, where each node represents an intersection or road endpoint in Ontario, and each edge represents a road segment connecting two of those nodes with a weight representing the distance between them. This graph structure directly models the road network because roads inherently connect two points, and removing an edge in the graph mirrors a real-world road/segment of road closure: allowing us to analyze which road (next shortest path) that closure would lead the motorists to take. \\
+The road network will be represented as a weighted directed graph, where each node represents an intersection or road endpoint in Ontario, and each edge represents a road segment connecting two of those nodes with a weight representing the distance between them in meters. This graph structure directly models the road network because roads inherently connect two points, and removing an edge in the graph mirrors a real-world road/segment of road closure: allowing the analysis of which road path (next shortest path) that closure would lead the motorists to take to travel through the two nodes this segment used to connect. \\
 
-\par
 
-The dataset used is the Ontario Road Network from the Government of Ontario, available at \url{https://geohub.lio.gov.on.ca/datasets/mnrf::ontario-road-network-orn-road-net-element/about}. It contains 1,088,092 nodes and 1,541,898 edges. The file stores each road connection as two node IDs on one line, separated by a tab, representing a road between two intersections. For example:
+The dataset to be used is the Ontario Road Network from Ontario Ministry of Natural Resources, available at \url{https://geohub.lio.gov.on.ca/datasets/mnrf::ontario-road-network-orn-road-net-element/about}. As of March 2, 2026 11:54 pm, this dataset contains 1,119,553 edges (roads) where a bidirectional road is counted as two different edges. It also contains 433,478 unique nodes. It is updated weekly, so the plan is to fetch data from this API in the project, so that the data is not stale.
+The following piece of JSON, with similar fields, whose example has been demonstrated already in it, and unneeded metadata in response being omitted for brevity, obtained by hitting one of paginated api \url{https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open09/MapServer/0/query?outFields=OGF_ID,FROM_JUNCTION_ID,TO_JUNCTION_ID,LENGTH,DIRECTION_OF_TRAFFIC_FLOW,OBJECTID&returnGeometry=true&outSR=4326&f=json&where=OBJECTID%20%3C%2047770000} is:
+
 \begin{verbatim}
-0    1
-0    6309
-0    6353
+
+{
+    ...
+    "features": [
+    ...
+
+        {
+          "attributes": {
+            "OGF_ID": 1500457262,
+            "FROM_JUNCTION_ID": 7221681,
+            "TO_JUNCTION_ID": 7221677,
+            "LENGTH": 434.953,
+            "DIRECTION_OF_TRAFFIC_FLOW": "Negative",
+            "OBJECTID": 47769490
+          },
+          "geometry": ...
+        },
+        {
+          "attributes": {
+            "OGF_ID": 1500452584,
+            "FROM_JUNCTION_ID": 1500124587,
+            "TO_JUNCTION_ID": 1500124588,
+            "LENGTH": 52.924,
+            "DIRECTION_OF_TRAFFIC_FLOW": "Both",
+            "OBJECTID": 47769586
+          },
+          "geometry": {
+            "paths": [
+              [
+                [-78.6984056, 45.0490474990568],
+                [-78.6981341, 45.0494830990568]
+              ]
+            ]
+          }
+        },
+        {
+          "attributes": {
+            "OGF_ID": 1500452564,
+            "FROM_JUNCTION_ID": 6052867,
+            "TO_JUNCTION_ID": 6052870,
+            "LENGTH": 85.19,
+            "DIRECTION_OF_TRAFFIC_FLOW": "Positive",
+            "OBJECTID": 47769570
+          },
+          "geometry": ...
+        }
+        ...
+    ]
+}
+
 \end{verbatim}
-This shows that intersection 0 directly connects to intersections 1, 6309, and 6353.\\
 
-\par
+Extracted from documentation of this API, the following information about this JSON is important to note (Ontario Ministry of Natural Resources 16, 59). The JSON here shows that road with object id 47769570 runs from vertex id 6052867 (FROM\_JUNCTION\_ID) to vertex id 6052870 (TO\_JUNCTION\_ID) only in the forward direction. In contrast, the road from vertex id 1500124587 to vertex id 1500124588 runs both ways, while the road from vertex id 7221681 to 7221677 only runs in reverse direction. The first element of attribute \texttt{paths} in \texttt{geometry} gives a list of coordinate tuples, that serve as realworld polylines that join together to connect the two vertices. \\
 
-The graph will be displayed using pygame, where nodes appear as dots and edges appear as lines. The user can click on an edge to simulate removing that road/road segment. Once removed, Dijkstra's algorithm computes the shortest path between the two nodes that road previously connected, and highlights it on the screen in a distinct color. If no path exists, the program displays a message indicating those two nodes are now disconnected, meaning the removed road was critical to the network.
+
+The graph will be displayed using folium (a popular library to display detailed maps) and streamlit\_folium library, where nodes will appear as dots and roads that connect those nodes will appear as polylines. The folium library's Map class will be used to create the map of Ontario and center it on screen, and then its Polyline class will be used to create polylines from the geometric polyline data fetched from the api (see sample data), but folium library itself does not allow bidirectional communication (Story, “Getting Started — Folium”; “PolyLine — Folium”). To solve this issue, streamlit\_folium library's st\_folium function will be used to render the map created by folium, and then the callback provided to this function will be able to capture clicks on the map (Zwitch). This bidirectional communication capability is the reason why folium and streamlit\_folium were chosen to represent the maps, as this is required for polyline removal and displaying shortest path interaction. Going back to the captured clicks, those clicks coordinates will then be passed to Shapely library's distance method of LineString class (which captures a single polyline point) to see if the click coordinates are on a polyline, and if yes, then the relevant road to which the polyline belonged to would be shown in different colour to highlight it being removed (Gillies). Shapely makes concentration on other important features easier, as it handles click detection calculation to a degree. Then, custom written Dijktra's algorithm would be run to compute the shortest path, and it would be highlighted on the map taking advantage of streamlit\_folium's bidirectional communication capabilities due to how streamlit's architecture automatically reruns the app on each update. Finally, streamlit (on top of which streamlit\_folium is built) library's markdown method will be used to show the length of new path besides the map (Snowflake Inc., “Basic Concepts of Streamlit”; “St.markdown”).
 
 Types of computations to perform on the data:
 
-1. Display a graph representation of road network using pygame.
+1. Display a graph representation of road network on Ontario map.
 
-2. Make a road removable, and use Dijktra's algorithm to compute the length of shortest path between point A and
-point B that the removed single road had connected previously. Dijktra's algorithm is used to give the shortest path from one
-source vertex to all other ones, and it has a time complexity of $\Theta((V+E)LogV)$ where $E$ is the number of edges (roads) and $V$ is the number of vertices (intersections/road start/end point), so it is best suited to solve
-the problem efficiently for this data (GeeksforGeeks).
+2. Make a road segment removable by clicking on it, and use Dijktra's algorithm to compute the length of shortest path between point A and
+point B that the removed single road segment use to connect previously. Dijktra's algorithm is used to give the shortest path from one
+source vertex to all other ones, and it has a time complexity of $\Theta((V+E)LogV)$ where $E$ is the number of edges (roads) and $V$ is the number of vertices (intersections/road start/end point), so it is best suited to solve the problem efficiently for this data (GeeksforGeeks).
 
-3. Using the same algorithm as above, build a collection of the shortest path and highlight this shortest path in the graph, and in case of a tie, show one of the shortest paths in the graph.
+3. Using the same algorithm as above, build a collection of the shortest path from the graph and highlight this shortest path on the map, and in case of a tie, show one of those shortest paths. Show this shortest path on the map in a distinct color. If no path exists, the program displays a message indicating those two nodes are now disconnected.
+
+4. Filter and display only the part of graph which is current in view, as drawing all polylines at once will lead to performance issues.
+
 
 \section*{References}
 
+\begin{doublespacing}
+\fontfamily{ptm}\fontsize{12}{16}\selectfont
+
+\begin{center}
+Works Cited:
+\end{center}
+\noindent
+\hangindent=0.5in
+\hangafter=1
 GeeksforGeeks. “Dijkstra’s Algorithm to Find Shortest Paths from a Source to All.” GeeksforGeeks, 25 Nov. 2012, www.geeksforgeeks.org/dsa/dijkstras-shortest-path-algorithm-greedy-algo-7/.
 
-https://geohub.lio.gov.on.ca/datasets/mnrf::ontario-road-network-orn-road-net-element/about
+\noindent
+\hangindent=0.5in
+\hangafter=1
+Gillies, Sean. “Shapely.LineString — Shapely 2.1.2 Documentation.” Readthedocs.io, 2025, \url{shapely.readthedocs.io/en/stable/reference/shapely.LineString.html\#shapely.LineString.distance.} Accessed 3 Mar. 2026.
+
+\noindent
+\hangindent=0.5in
+\hangafter=1
+Ontario Ministry of Natural Resources. “Ontario Road Network (ORN) Road Net Element.” \textit{Gov.on.ca}, 2020, geohub.lio.gov.on.ca/datasets/mnrf::ontario-road-network-orn-road-net-element/about.
+
+\noindent
+\hangindent=0.5in
+\hangafter=1
+---. ORN Road Net Element - User Guide-EN. 2025, Ontario Road Network - Road Net Element - User Guide (Word).
+
+\noindent
+\hangindent=0.5in
+\hangafter=1
+Snowflake Inc. “Basic Concepts of Streamlit - Streamlit Docs.” Streamlit.io, 2026, \url{docs.streamlit.io/get-started/fundamentals/main-concepts\#data-flow|.} Accessed 3 Mar. 2026.
+
+\noindent
+\hangindent=0.5in
+\hangafter=1
+---. “St.markdown - Streamlit Docs.” Streamlit.io, 2024, \url{docs.streamlit.io/develop/api-reference/text/st.markdown.}
+
+\noindent
+\hangindent=0.5in
+\hangafter=1
+Story, Rob. “PolyLine — Folium 0.1.Dev1+G3ccc47c Documentation.” Python-Visualization.github.io, \url{python-visualization.github.io/folium/latest/user\_guide/vector\_layers/polyline.html.}
+
+\noindent
+\hangindent=0.5in
+\hangafter=1
+---. “Getting Started — Folium 0.1.Dev1+G9ab63f7 Documentation.” Python-Visualization.github.io, \url{python-visualization.github.io/folium/latest/getting\_started.html.}
+
+\noindent
+\hangindent=0.5in
+\hangafter=1
+Zwitch, Randy. “Callbacks.” Streamlit.app, 7 July 2023, \url{folium.streamlit.app/callbacks.} Accessed 3 Mar. 2026.
+
+\end{doublespacing}
+
 \end{document}

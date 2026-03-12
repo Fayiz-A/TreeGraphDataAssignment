@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+
+from Coordinate import Coordinate
 from Vertex import _Vertex
 
 
@@ -9,3 +11,4 @@ class Road:
     length: float
     road_id: str
     removed: bool
+    geometry: list[Coordinate]

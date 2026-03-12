@@ -1,5 +1,6 @@
 from Graph import Graph
 from DataLoader import DataLoader
+from Road import Road
 
 
 class RoadManager:
@@ -7,6 +8,8 @@ class RoadManager:
 
     def __init__(self) -> None:
 
-    def fetch_data(self, data_loader: DataLoader) -> None:
+    def fetch_data_and_build_graph(self, data_loader: DataLoader) -> None:
 
-    def _remove_road(self, road_id: str) -> None:
+    def _remove_road_and_get_path(self, road_id: str) -> list[Road]:
+
+    def check_removability(self, roads:list[Road]) -> bool:

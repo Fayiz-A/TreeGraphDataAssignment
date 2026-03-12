@@ -1,0 +1,18 @@
+from Road import Road
+from Vertex import _Vertex
+
+
+class Graph:
+    ""
+
+    vertices: dict[str, _Vertex]
+    roads: dict[str, Road]
+
+    def __init__(self) -> None:
+
+    def remove_road(self, from_junction_id: str, to_junction_id: str, length: float, road_id: str,
+                    removed: bool) -> None:
+
+    def add_junction(self, junction_id: str) -> None:
+
+    def check_is_neighbour(self, road_id_1: str, road_id_2: str) -> bool:

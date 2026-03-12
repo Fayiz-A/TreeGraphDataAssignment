@@ -1,7 +1,6 @@
 from dataclasses import dataclass
-
 from Coordinate import Coordinate
-from Vertex import _Vertex
+from Graph import _Vertex
 
 
 @dataclass
@@ -12,3 +11,4 @@ class Road:
     road_id: str
     removed: bool
     geometry: list[Coordinate]
+

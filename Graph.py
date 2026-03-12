@@ -1,9 +1,14 @@
+from dataclasses import dataclass
 from Road import Road
-from Vertex import _Vertex
+
+
+@dataclass
+class _Vertex:
+    neighbours: list[Road]
+    junction_id: str
 
 
 class Graph:
-    ""
 
     vertices: dict[str, _Vertex]
     roads: dict[str, Road]
@@ -22,5 +27,4 @@ class Graph:
     def add_junction(self, junction_id: str) -> None:
 
     def check_is_neighbour(self, road_id_1: str, road_id_2: str) -> bool:
-
 

@@ -7,7 +7,6 @@ class _Vertex:
     neighbours: list[Road]
     junction_id: str
 
-
 class Graph:
 
     vertices: dict[str, _Vertex]

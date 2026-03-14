@@ -1,6 +1,6 @@
 from Coordinate import Coordinate
-from InfoDisplay import InfoDisplayState
-from RoadManager import RoadManager
+from info_display import InfoDisplayState
+from road_manager import RoadManager
 from UIRoad import UIRoad
 
 
@@ -9,7 +9,6 @@ class StreamlitManager:
     _roads: dict[str, UIRoad]
     _selected_roads: dict[str, UIRoad]
     _info_display_state: InfoDisplayState
-
 
     def __init__(self) -> None:
 

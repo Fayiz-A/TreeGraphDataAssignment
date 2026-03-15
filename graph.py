@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from Coordinate import Coordinate
-from Road import Road
+from coordinate import Coordinate
+from road import Road
 
 
 @dataclass
@@ -15,7 +15,7 @@ class Graph:
 
     def __init__(self) -> None:
 
-    def compute_shortest_path(self, source_junction_id, target_junction_id) -> list[Road]:
+    def compute_shortest_path(self, source_junction_id: str, target_junction_id: str) -> list[Road]:
 
     def remove_road(self, road_id: str) -> None:
 

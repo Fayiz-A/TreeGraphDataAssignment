@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from Coordinate import Coordinate
-from Graph import _Vertex
+from coordinate import Coordinate
+from graph import _Vertex
 
 
 @dataclass

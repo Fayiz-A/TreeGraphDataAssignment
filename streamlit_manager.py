@@ -11,6 +11,7 @@ class StreamlitManager:
     _info_display_state: InfoDisplayState
 
     def __init__(self) -> None:
+        pass
 
     def _handle_road_removal(self) -> None:
         pass

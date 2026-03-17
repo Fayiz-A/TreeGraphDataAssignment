@@ -1,6 +1,5 @@
-from graph import Graph
+from graph import Graph, Road
 from data_loader import DataLoader
-from road import Road
 
 
 class RoadManager:

@@ -1,4 +1,4 @@
-from road import Road
+from graph import Road
 
 class UIRoad:
     road: Road

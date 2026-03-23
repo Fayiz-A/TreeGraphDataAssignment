@@ -96,5 +96,59 @@ class Graph:
         if junction_id not in self.vertices:
             self.vertices[junction_id] = _Vertex(junction_id, [])
 
-    def check_is_neighbour(self, road_id_1: str, road_id_2: str) -> bool:
-        pass
+    def is_valid_path(self, road_ids: list[str]) -> bool:
+        """
+        Returns true if there is a connected valid path, that is, there exists only 1 start point and only one endpoint
+        and the path is connected.
+
+        Preconditions:
+            - len(road_ids) >= 0
+            - all({road_id in self.roads for road_id in road_ids})
+
+        """
+
+        if len(road_ids) == 0:
+            return False
+
+        num_starts = set()
+        num_ends = set()
+
+        for road_id in road_ids:
+            road: Road = self.roads[road_id]
+
+            start: str = road.from_junction.junction_id
+            end: str = road.to_junction.junction_id
+
+            num_starts.add(start)
+            num_ends.add(end)
+
+        start_options: list[str] = [r for r in num_starts if r not in num_ends]
+        end_options: list[str] = [r for r in num_ends if r not in num_starts]
+
+        if len(start_options) != 1 or len(end_options) != 1:
+            return False
+
+        visited = set()
+        stack: list[str] = [road_ids[0]]
+
+        while len(stack) > 0:
+            current: str = stack.pop()
+            if current in visited:
+                continue
+
+            visited.add(current)
+            current_road: Road = self.roads[current]
+
+            for other in road_ids:
+                if other in visited:
+                    continue
+
+                other_road: Road = self.roads[other]
+
+                if (current_road.to_junction == other_road.from_junction or
+                        current_road.from_junction == other_road.to_junction or
+                        current_road.from_junction == other_road.from_junction or
+                        current_road.to_junction == other_road.to_junction):
+                    stack.append(other)
+
+        return len(visited) == len(road_ids)

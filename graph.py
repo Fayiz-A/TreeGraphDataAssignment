@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from python_ta.contracts import check_contracts
 
-# from coordinate import Coordinate
-# from road import Road
-
 from dataclasses import dataclass
 from coordinate import Coordinate
 

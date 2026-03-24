@@ -27,15 +27,11 @@ class _Vertex:
 
     Representation Invariants:
         - len(self.junction_id) >= 0
-        - all(u in u.to_junction.neighbours for u in self.neighbours)
 
     """
 
     junction_id: str
     neighbours: list[Road]
-
-    def __repr__(self) -> str:
-        return self.junction_id
 
 
 class Graph:
@@ -44,7 +40,7 @@ class Graph:
 
     Instance Attributes:
         - vertices: a mapping of a junction id to its representing vertex.
-        - roads: a mappihng of a road id to its Road object.
+        - roads: a mapping of a road id to its Road object.
 
     """
 
@@ -171,8 +167,9 @@ class Graph:
         Preconditions:
             - from_junction_id in self.vertices
             - to_junction_id in self.vertices
-            - length >= 0
-            - len(road_id) >= 0
+            - len(geometry) > 1
+            - length > 0
+            - len(road_id.strip()) > 0
         """
 
         if road_id not in self.roads:
@@ -182,7 +179,6 @@ class Graph:
                                        removed, geometry)
 
             junction1.neighbours.append(self.roads[road_id])
-            # junction2.neighbours.append(self.roads[road_id])
 
     def add_bidirectional_roads(self, from_junction_id: str, to_junction_id: str, length: float, road_id: str,
                                 removed: bool, geometry: list[Coordinate]) -> None:
@@ -206,7 +202,7 @@ class Graph:
         in self.vertices, the function does nothing.
 
         Preconditions:
-            - len(junction_id) >= 0
+            - len(junction_id.strip()) > 0
         """
 
         if junction_id not in self.vertices:

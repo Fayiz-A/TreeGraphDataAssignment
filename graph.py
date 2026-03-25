@@ -96,59 +96,53 @@ class Graph:
         if junction_id not in self.vertices:
             self.vertices[junction_id] = _Vertex(junction_id, [])
 
-    def is_valid_path(self, road_ids: list[str]) -> bool:
+    def is_valid_road_selection(self, road_ids: list[str]) -> tuple[bool, list[str]]:
         """
-        Return true if there is a connected valid path, that is, there exists only 1 start point for the path and
-        only one endpoint for the path.
+        Return a tuple of:
+            - a bool that is true if there exists a connected valid path
+            - a list of the starting junction id and the ending junction id if there is a connected valid path,
+             otherwise, an empty list.
 
+        A valid path is defined as a set of roads such that there exists only 1 start point for the path and
+        only one endpoint for the path, and if there are more than one paths that are disconnected, then only
+        1 path has the start and end points (the other path(s) are a cycle entirely)
         Preconditions:
             - len(road_ids) >= 0
             - all({road_id in self.roads for road_id in road_ids})
 
         """
-
         if len(road_ids) == 0:
-            return False
+            return False, []
 
-        num_starts = set()
-        num_ends = set()
+        free_starts: list = []
+        free_ends: list = []
 
         for road_id in road_ids:
             road: Road = self.roads[road_id]
-
             start: str = road.from_junction.junction_id
             end: str = road.to_junction.junction_id
 
-            num_starts.add(start)
-            num_ends.add(end)
+            is_free_start: bool = True
+            for other_id in road_ids:
+                other: Road = self.roads[other_id]
+                if other.to_junction.junction_id == start:
+                    is_free_start = False
+                    break
 
-        start_options: list[str] = [r for r in num_starts if r not in num_ends]
-        end_options: list[str] = [r for r in num_ends if r not in num_starts]
+            if is_free_start:
+                free_starts.append(start)
 
-        if len(start_options) != 1 or len(end_options) != 1:
-            return False
+            is_free_end: bool = True
+            for other_id in road_ids:
+                other: Road = self.roads[other_id]
+                if other.from_junction.junction_id == end:
+                    is_free_end = False
+                    break
 
-        visited = set()
-        stack: list[str] = [road_ids[0]]
+            if is_free_end:
+                free_ends.append(end)
 
-        while len(stack) > 0:
-            current: str = stack.pop()
-            if current in visited:
-                continue
+        if len(set(free_starts)) != 1 or len(set(free_ends)) != 1:
+            return False, []
 
-            visited.add(current)
-            current_road: Road = self.roads[current]
-
-            for other in road_ids:
-                if other in visited:
-                    continue
-
-                other_road: Road = self.roads[other]
-
-                if (current_road.to_junction == other_road.from_junction or
-                        current_road.from_junction == other_road.to_junction or
-                        current_road.from_junction == other_road.from_junction or
-                        current_road.to_junction == other_road.to_junction):
-                    stack.append(other)
-
-        return len(visited) == len(road_ids)
+        return True, [free_starts[0], free_ends[0]]

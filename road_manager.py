@@ -1,6 +1,6 @@
 from graph import Graph
 from data_loader import DataLoader
-from data_load_state import DataLoadSuccessState
+from data_load_state import DataLoadState, DataLoadSuccessState
 from road import Road
 from coordinate import Coordinate
 
@@ -13,33 +13,46 @@ class RoadManager:
 
     def fetch_data_and_build_graph(self, data_loader: DataLoader) -> None:
         """
-        Fetches the road network data using data_loader and builds the graph.
+        Fetch and build the road network graph using data_loader.
+
+        Preconditions:
+            - None
         """
-        result = data_loader.load()
+        result: DataLoadState = data_loader.load()
 
         if not isinstance(result, DataLoadSuccessState):
+            print('Failed to load Ontario road network data.')
             return
 
         data = result.data
-        for feature in data['features']:
-            attributes = feature['attributes']
-            from_id = str(attributes['FROM_JUNCTION_ID'])
-            to_id = str(attributes['TO_JUNCTION_ID'])
-            length = attributes['LENGTH']
-            road_id = str(attributes['OGF_ID'])
-            direction = attributes['DIRECTION_OF_TRAFFIC_FLOW']
-            geometry = [Coordinate(pt[1], pt[0]) for path in feature['geometry']['paths'] for pt in path]
+        graph = self._graph
 
-            self._graph.add_junction(from_id)
-            self._graph.add_junction(to_id)
+        for feature in data['features']:
+            attributes: dict = feature['attributes']
+            from_id: str = str(attributes['FROM_JUNCTION_ID'])
+            to_id: str = str(attributes['TO_JUNCTION_ID'])
+            length: float = attributes['LENGTH']
+            road_id: str = str(attributes['OGF_ID'])
+            direction: str = attributes['DIRECTION_OF_TRAFFIC_FLOW']
+            geometry: list[Coordinate] = [Coordinate(coordinate[1], coordinate[0]) for coordinate in
+                                          feature['geometry']['paths'][0]]
+
+            graph.add_junction(from_id)
+            graph.add_junction(to_id)
 
             if direction == 'Both':
-                self._graph.add_road(from_id, to_id, length, road_id + '_pos', False, geometry)
-                self._graph.add_road(to_id, from_id, length, road_id + '_neg', False, geometry[::-1])
+                graph.add_road(from_junction_id=from_id, to_junction_id=to_id, length=length, road_id=f'{road_id}_pos',
+                               removed=False, geometry=geometry)
+                graph.add_road(from_junction_id=to_id, to_junction_id=from_id, length=length, road_id=f'{road_id}_neg',
+                               removed=False, geometry=geometry[::-1])
             elif direction == 'Positive':
-                self._graph.add_road(from_id, to_id, length, road_id, False, geometry)
+                graph.add_road(from_junction_id=from_id, to_junction_id=to_id, length=length, road_id=road_id,
+                               removed=False, geometry=geometry)
             elif direction == 'Negative':
-                self._graph.add_road(to_id, from_id, length, road_id, False, geometry[::-1])
+                graph.add_road(from_junction_id=to_id, to_junction_id=from_id, length=length, road_id=road_id,
+                               removed=False, geometry=geometry[::-1])
+            else:
+                print(f'Unknown direction value: {direction} for road {road_id}')
 
     def remove_road_and_get_path(self, road_id: str) -> list[Road]:
         pass

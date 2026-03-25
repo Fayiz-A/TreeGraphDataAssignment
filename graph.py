@@ -98,8 +98,8 @@ class Graph:
 
     def is_valid_path(self, road_ids: list[str]) -> bool:
         """
-        Returns true if there is a connected valid path, that is, there exists only 1 start point and only one endpoint
-        and the path is connected.
+        Return true if there is a connected valid path, that is, there exists only 1 start point for the path and
+        only one endpoint for the path.
 
         Preconditions:
             - len(road_ids) >= 0

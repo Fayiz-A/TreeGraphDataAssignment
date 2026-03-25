@@ -483,8 +483,56 @@ class Graph:
         if junction_id not in self.vertices:
             self.vertices[junction_id] = _Vertex(junction_id, [])
 
-    def check_is_neighbour(self, road_id_1: str, road_id_2: str) -> bool:
-        pass
+    def is_valid_road_selection(self, road_ids: list[str]) -> tuple[bool, list[str]]:
+        """
+        Return a tuple of:
+            - a bool that is true if there exists a connected valid path
+            - a list of the starting junction id and the ending junction id if there is a connected valid path,
+             otherwise, an empty list.
+
+        A valid path is defined as a set of roads such that there exists only 1 start point for the path and
+        only one endpoint for the path, and if there are more than one paths that are disconnected, then only
+        1 path has the start and end points (the other path(s) are a cycle entirely)
+        Preconditions:
+            - len(road_ids) >= 0
+            - all({road_id in self.roads for road_id in road_ids})
+
+        """
+        if len(road_ids) == 0:
+            return False, []
+
+        free_starts: list = []
+        free_ends: list = []
+
+        for road_id in road_ids:
+            road: Road = self.roads[road_id]
+            start: str = road.from_junction.junction_id
+            end: str = road.to_junction.junction_id
+
+            is_free_start: bool = True
+            for other_id in road_ids:
+                other: Road = self.roads[other_id]
+                if other.to_junction.junction_id == start:
+                    is_free_start = False
+                    break
+
+            if is_free_start:
+                free_starts.append(start)
+
+            is_free_end: bool = True
+            for other_id in road_ids:
+                other: Road = self.roads[other_id]
+                if other.from_junction.junction_id == end:
+                    is_free_end = False
+                    break
+
+            if is_free_end:
+                free_ends.append(end)
+
+        if len(set(free_starts)) != 1 or len(set(free_ends)) != 1:
+            return False, []
+
+        return True, [free_starts[0], free_ends[0]]
 
 
 if __name__ == '__main__':

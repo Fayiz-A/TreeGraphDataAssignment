@@ -59,11 +59,12 @@ class StreamlitManager:
             length_check: bool = length <= length_bound
             bounds_check: bool = True
 
-            for coord in road.geometry:
-                if not (min_latitude <= coord.latitude <= max_latitude and
-                        min_longitude <= coord.longitude <= max_longitude):
-                    bounds_check = False
-                    break
+            if length_check:
+                for coord in road.geometry:
+                    if not (min_latitude <= coord.latitude <= max_latitude and
+                            min_longitude <= coord.longitude <= max_longitude):
+                        bounds_check = False
+                        break
 
             ui_road.visible = length_check and bounds_check
 

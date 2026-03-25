@@ -83,7 +83,7 @@ class Graph:
         >>> graph.add_bidirectional_roads('E', 'D', 1, 'ED', False, coordinates)
         >>> graph.add_bidirectional_roads('D', 'C', 1, 'DC', False, coordinates)
         >>> graph.add_bidirectional_roads('A', 'E', 7, 'AE', False, coordinates)
-        >>> shortest_path_result = graph.compute_shortest_path_heap('A', 'D')
+        >>> shortest_path_result = graph.compute_shortest_path('A', 'D')
         >>> (shortest_path_result[0].get_values()[::-1], shortest_path_result[1])
         (['A', 'B', 'C', 'D'], 4.0)
         """

@@ -62,3 +62,9 @@ class Tree:
             values.extend(subtree.get_values())
 
         return values
+
+    def print_values(self, depth: int = 0) -> None:
+        print(f'{'-' * depth}{self.root}')
+
+        for subtree in self.subtrees:
+            subtree.print_values(depth + 1)

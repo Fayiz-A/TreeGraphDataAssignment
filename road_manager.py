@@ -4,7 +4,7 @@ from road import Road
 
 
 class RoadManager:
-    _graph: Graph
+    graph: Graph
 
     def __init__(self) -> None:
         pass
@@ -12,8 +12,26 @@ class RoadManager:
     def fetch_data_and_build_graph(self, data_loader: DataLoader) -> None:
         pass
 
-    def remove_road_and_get_path(self, road_id: str) -> list[Road]:
-        pass
+    def remove_road_and_get_path(self, road_ids: list[str], source_junction: str, target_junction: str) -> list[Road]:
+        """
+        Removes all roads in roads_id, and returns a list of roads which make the shortest path from
+        source_junction to target_junction.
+
+        Preconditions:
+            - len(road_ids) > 0
+            - source_junction is a valid junction represented by a string.
+            - target_junction is a valid junction represented by a string.
+        """
+        lst: list = []
+        for road_id in road_ids:
+            lst.append(self.graph.roads[road_id])
+
+        if self.check_removability(lst):
+            for road_id in road_ids:
+                self.graph.remove_road(road_id)
+            return self.graph.compute_shortest_path(source_junction, target_junction)
+
+        return []
 
     def check_removability(self, roads: list[Road]) -> bool:
         pass

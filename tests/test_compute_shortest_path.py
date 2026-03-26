@@ -84,6 +84,7 @@ def test_time_compute_shortest_path() -> None:
 
     vertices = list(graphs[1].vertices.keys())
 
+    # using timeit with globals like this seen from https://stackoverflow.com/a/25769110
     seconds: float = timeit.timeit(
         'graphs[1].compute_shortest_path(vertices[0], vertices[randint(0, 1000)])',
         number=10, globals={'graphs': graphs, 'vertices': vertices, 'randint': randint})  # should take at most about

@@ -7,10 +7,129 @@ from typing import Optional
 import python_ta
 from python_ta.contracts import check_contracts
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from coordinate import Coordinate
 from path_tree import PathTree
-from shortest_path import LenMinimizerCandidateRoad, ShortestDistanceToVertex, ShortestPathResult
+
+
+@check_contracts
+@dataclass
+class ShortestPathResult:
+    """
+    A dataclass to represent what a shortest path algorithm
+    to find *all* shortest paths from one source to another source
+    would return. In case the target vertex is disconected, do *not* use
+    this class, and rather return something like None from the method/function
+    which uses this.
+
+    Instance Attributes:
+        - length: the length of the shortest path in meters. There
+        exists no other shorter path than this length in the graph
+        over which the algorithm was run.
+        - all_shortest_paths: a collection of all shortest
+        paths from source vertex to target vertex which have
+        are length meters long.
+
+    Representation Invariants:
+        - self.length >= 0
+        - self.length != 0 or len(self.all_shortest_paths) == 1 and len(self.all_shortest_paths[0] == 1)
+        - self.length == 0 if and only if self.all_shortest_paths contains list with element origin
+    """
+    length: float
+    all_shortest_paths: list[list[str]]
+
+
+# dataclass order and field method code seen from https://stackoverflow.com/a/72330706
+@check_contracts
+@dataclass(order=True)
+class LenMinimizerCandidateRoad:
+    """
+    A dataclass to represent a candidate shorter road in Dijktras algorithm.
+
+    This is what gets added to a distance array which is iterated over
+    in the while loop of Djiktras. The order=True attribute of this dataclass
+    takes care of how priority queue/heap uses it for comparison, and hence
+    it can be used in priority queues/heaps out of the box. This is ordered
+    by the length_from_source instance attribute only.
+
+    Instance Attributes:
+        - length_from_source: the length of the candidate shorter road in meters *from source* to end_junction.
+        - start_junction: the junction/vertex of where this road
+        starts from
+        - end_junction: the junction/vertex of where this road
+        connects to (meaning where its end junction is)
+
+    Representation Invariants:
+        - self.length_from_source >= 0
+        - self.length_from_source != 0 or self.start_junction.junction_id == self.end_junction.junction_id
+        - self.length_from_source == 0 if and only if the self.start_junction.junction_id is
+        the origin and end_junction.junction_id is the
+        origin (typically the first road/edge added to
+        Dijktras while loop variable)
+        - len(self.start_junction_id.strip()) > 0
+        - len(self.end_junction_id.strip()) > 0
+        - both start_junction and end_junction are valid
+        junctions (vertices) present in the graph over which this
+        class is being used in the graph's Dijktras algorithm
+    """
+    start_junction: _Vertex = field(compare=False)
+    end_junction: _Vertex = field(compare=False)
+    length_from_source: float
+
+
+@check_contracts
+@dataclass
+class ShortestDistanceToVertex:
+    """
+    A dataclass to represent the shortest distance till now/eventually
+    to the vertex this is attached to in the dictionary that uses it.
+    To be used in Dijktras algorithm to represent shortest distances
+    till now and then eventually the final shortest distance if the
+    junction id this is attached to is our target one (or lies in path
+    of even one of the possible shortest path to target junction id)
+
+    Instance Attributes:
+        - shortest_distance_till_now: the length of the shortest
+        distance to vertex this is attached to from source
+         found till now as per Dijktras algorithm.
+        - shortest_paths_prev_vertex_ids: a set of vertex/junction id of
+        the previous vertices from which the shortest distance from source
+        came. This can be used to iterate back till
+        the first origin after our version of Dijktras completes
+        to recover the path(s).
+        - junction_id: the junction_id this represents shortest path to
+        from source junction
+
+    Representation Invariants:
+        - self.shortest_distance_till_now == infinity if and only
+        if the Dijktras algorithm has not yet performed relaxations
+        on the junction to which this is attached to or if the
+        junction is disconnected, where infinity is a very large
+        number that would never be reached even if all edges
+        of the road are summed up twice (twice to
+        be on a safer side). Ensure not to make it so big the
+        Python cannot handle it simply.
+        - self.shortest_distance_till_now >= 0
+        - self.shortest_distance_till_now == 0 if and only if this
+        represents route to the source itself
+        - if len(self.shortest_paths_prev_vertex_ids) > 0, then all paths are
+        tracable back to source and can be traced using
+        self.shortest_paths_prev_vertex_ids, and those paths have the same
+        length, and that length is the shortest length to the
+        self.junction_id from source junction.
+        - if len(self.shortest_paths_prev_vertex_ids) > 0 and self.junction_id is
+        the target junction, then self.shortest_paths_prev_vertex_ids
+        should contain all neighbouring junction ids that are connected
+        to it and lie along the shortest path.
+        - len(self.shortest_paths_prev_vertex_ids) == 0 if and only if one
+        or more of these scenarios is True:
+          - Dijktras did not relax the self.junction_id this corresponds to
+          - self.junction_id is the source junction itself
+
+    """
+    junction_id: str
+    shortest_distance_till_now: float
+    shortest_paths_prev_vertex_ids: set[str]
 
 
 @dataclass
@@ -81,21 +200,22 @@ class Graph:
         >>> graph.add_bidirectional_roads('A', 'B', 4, 'AB', False, coordinates)
         >>> graph.add_bidirectional_roads('A', 'D', 5, 'AD', False, coordinates)
         >>> graph.add_bidirectional_roads('B', 'C', 4, 'BC', False, coordinates)
-        >>> graph.add_bidirectional_roads('B', 'D', 1, 'BC', False, coordinates)
+        >>> graph.add_bidirectional_roads('B', 'D', 1, 'BD', False, coordinates)
         >>> graph.add_bidirectional_roads('C', 'D', 3, 'CD', False, coordinates)
         >>> graph.add_bidirectional_roads('C', 'E', 1, 'CE', False, coordinates)
         >>> graph.add_bidirectional_roads('D', 'E', 4, 'DE', False, coordinates)
         >>> shortest_path_result: ShortestPathResult = graph.compute_shortest_path('A', 'E')
-        >>> (shortest_path_result.all_shortest_paths),
-        ([['A', 'D', 'E'], ['A', 'D', 'C', 'E'], ['A', 'B', 'C', 'E'], ['A', 'B', 'D', 'E'],  ['A', 'B', 'C', 'E']], 9.0)
+        >>> (sorted(shortest_path_result.all_shortest_paths, key=lambda item: ''.join(item)), shortest_path_result.length)
+        ([['A', 'B', 'C', 'E'], ['A', 'B', 'D', 'C', 'E'], ['A', 'B', 'D', 'E'], ['A', 'D', 'C', 'E'], ['A', 'D', 'E']], 9.0)
         """
+        #         >>> (sorted(shortest_path_result.all_shortest_paths), shortest_path_result.length) == (expected, 9.0)
         # the dijktras code for this was inspired by https://cp-algorithms.com/graph/dijkstra.html, with major
         # changes to it to make it fast, return shortest paths also and not only distance, and to make it
         # suitable for returning multiple shortest equivalent paths.
         visited: set[str] = set()
         all_shortest_paths_computed: set[str] = set()
 
-        infinity: float = 100_000_000_000_000.0  # 100 billion km, Ontario road network
+        infinity: float = 1_000_000_000_000.0  # 1 billion km, Ontario road network
         # road length sum should not be that big
         distance: dict[str, ShortestDistanceToVertex] = {}
 
@@ -106,13 +226,13 @@ class Graph:
                 distance[vertex] = ShortestDistanceToVertex(
                     junction_id=vertex,
                     shortest_distance_till_now=0.0,
-                    shortest_paths_prev_vertex_ids=[]
+                    shortest_paths_prev_vertex_ids=set()
                 )
             else:
                 distance[vertex] = ShortestDistanceToVertex(
                     junction_id=vertex,
                     shortest_distance_till_now=infinity,
-                    shortest_paths_prev_vertex_ids=[]
+                    shortest_paths_prev_vertex_ids=set()
                 )
 
         len_minimizer_candidate_roads: list[LenMinimizerCandidateRoad] = []
@@ -127,7 +247,7 @@ class Graph:
         source_vertex: _Vertex = self.vertices[source_junction_id]
 
         heappush(len_minimizer_candidate_roads, LenMinimizerCandidateRoad(
-            distance=0.0,
+            length_from_source=0.0,
             start_junction=source_vertex,
             end_junction=source_vertex
         ))
@@ -147,7 +267,7 @@ class Graph:
                 all_shortest_paths_computed.add(current_vertex_id)
             else:
                 visited.add(current_vertex_id)
-                distance[current_vertex_id].shortest_paths_prev_vertex_ids.append(
+                distance[current_vertex_id].shortest_paths_prev_vertex_ids.add(
                     len_minimizer_candidate_road.start_junction.junction_id)
 
             if current_vertex_id == target_junction_id and target_junction_id in all_shortest_paths_computed:
@@ -178,12 +298,12 @@ class Graph:
 
                             heappush(len_minimizer_candidate_roads, (LenMinimizerCandidateRoad(
                                 length_from_source=distance[neighbour_junction_id].shortest_distance_till_now,
-                                start_junction=neighbour_junction,
-                                end_junction=current_vertex)
+                                start_junction=current_vertex,
+                                end_junction=neighbour_junction)
                             ))
 
         shortest_path_info: ShortestDistanceToVertex = distance[target_junction_id]
-        shortest_path_node_list: list[str] = shortest_path_info.shortest_paths_prev_vertex_ids
+        shortest_path_node_list: set[str] = shortest_path_info.shortest_paths_prev_vertex_ids
 
         tree: PathTree = PathTree(target_junction_id)
 
@@ -199,24 +319,27 @@ class Graph:
             all_shortest_paths=tree.get_all_possible_paths(),
         )
 
-    def _add_subtrees_from_list(self, tree: PathTree, source: str, children_to_add: list[str],
+    def _add_subtrees_from_list(self, tree: PathTree, source: str, children_to_add: set[str],
                                 distance: dict[str, ShortestDistanceToVertex]) -> None:
         """
         Mutating helper method
         TODO: continue this
         """
-        if children_to_add[0] == source:
-            tree.add_subtree(PathTree(children_to_add[0]))
-        else:
-            for child in children_to_add:
-                child_subtree: PathTree = PathTree(child)
+        for child in children_to_add:
+            child_subtree: PathTree = PathTree(child)
+
+            # we have reached our source junction
+            # id if this condition is False and the
+            # if branch doesn't execute. This non-execution
+            # of if branch is our base case.
+            if child != source:
                 self._add_subtrees_from_list(
                     child_subtree,
                     source,
                     distance[child].shortest_paths_prev_vertex_ids,
                     distance
                 )
-                tree.add_subtree(child_subtree)
+            tree.add_subtree(child_subtree)
 
     def remove_road(self, road_id: str) -> None:
         """
@@ -293,6 +416,8 @@ class Graph:
 if __name__ == '__main__':
     doctest.testmod(verbose=True)
 
-    python_ta.check_all(
-        module_name='graph.py'
-    )
+    python_ta.check_all(config={
+        'max-line-length': 120,
+        'disable': ['static_type_checker'],
+        'extra-imports': ['heapq', 'path_tree', 'coordinate'],
+    })

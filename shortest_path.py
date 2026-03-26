@@ -3,6 +3,8 @@ This file contains code related to 3 dataclasses that
 should be used in our modified version of Dijktras
 algorithm to make the code readable.
 """
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from python_ta.contracts import check_contracts
@@ -59,8 +61,8 @@ class LenMinimizerCandidateRoad:
 
     Representation Invariants:
         - self.length_from_source >= 0
-        - self.length_from_source != 0 or start_junction.junction_id == end_junction.junction_id
-        - self.length_from_source == 0 if and only if the start_junction.junction_id is
+        - self.length_from_source != 0 or self.start_junction.junction_id == self.end_junction.junction_id
+        - self.length_from_source == 0 if and only if the self.start_junction.junction_id is
         the origin and end_junction.junction_id is the
         origin (typically the first road/edge added to
         Dijktras while loop variable)

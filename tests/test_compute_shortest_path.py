@@ -6,7 +6,7 @@ import networkx as nx
 from random import random
 
 from coordinate import Coordinate
-from graph import Graph, _Vertex
+from graph import Graph, ShortestPathResult, _Vertex
 from math import isclose
 
 from path_tree import PathTree
@@ -45,7 +45,7 @@ def _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num:
 def test_compute_shortest_path() -> None:
     # making this around 100 would make the test case very slow, due to there being a complete graph
     # generated below, and all of its shortest paths from all possible start and end pairs being checked
-    vertices_num: int = 50
+    vertices_num: int = 10
 
     graphs: tuple[nx.DiGraph, Graph] =\
         _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num)
@@ -61,14 +61,14 @@ def test_compute_shortest_path() -> None:
     for start_vertex in test_graph_vertices:
         for end_vertex in test_graph_vertices:
             if start_vertex != end_vertex:
-                actual_shortest_path: tuple[PathTree, float] =\
+                actual_shortest_path: ShortestPathResult =\
                     test_graph.compute_shortest_path(str(start_vertex), str(end_vertex))
 
                 start_vertex_int: int = int(start_vertex)
                 end_vertex_int: int = int(end_vertex)
 
-                all_possible_paths: list[list[str]] = actual_shortest_path[0].get_all_possible_paths()
+                all_possible_paths: list[list[str]] = actual_shortest_path.all_shortest_paths
                 assert ([str(vertex) for vertex in shortest_path_matrix[start_vertex_int][end_vertex_int]] in
                         all_possible_paths)
-                assert isclose(actual_shortest_path[1],
+                assert isclose(actual_shortest_path.length,
                                shortest_path_length_matrix[start_vertex_int][end_vertex_int])

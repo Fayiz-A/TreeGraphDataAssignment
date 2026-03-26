@@ -10,6 +10,7 @@ from python_ta.contracts import check_contracts
 from dataclasses import dataclass
 from coordinate import Coordinate
 from path_tree import PathTree
+from shortest_path import LenMinimizerCandidateRoad, ShortestDistanceToVertex, ShortestPathResult
 
 
 @dataclass
@@ -61,8 +62,7 @@ class Graph:
         self.roads = {}
 
     @check_contracts
-    def compute_shortest_path(self, source_junction_id: str, target_junction_id: str) ->\
-            Optional[tuple[PathTree, float]]:
+    def compute_shortest_path(self, source_junction_id: str, target_junction_id: str) -> Optional[ShortestPathResult]:
         """
         Compute and return the shortest path between source junction id and target junction id and its length in
         metres. In case multiple shortest paths of same length exist, return one of them along with its length.
@@ -78,16 +78,16 @@ class Graph:
         >>> for i in range(65, 70):
         ...     graph.add_junction(chr(i))
         >>> coordinates: list[Coordinate] = [Coordinate(78, 100), Coordinate(79, 101)]
-        >>> graph.add_bidirectional_roads('A', 'B', 1, 'AB', False, coordinates)
-        >>> graph.add_bidirectional_roads('A', 'D', 10, 'AD', False, coordinates)
-        >>> graph.add_bidirectional_roads('B', 'C', 2, 'BC', False, coordinates)
-        >>> graph.add_bidirectional_roads('B', 'D', 8, 'BD', False, coordinates)
-        >>> graph.add_bidirectional_roads('E', 'D', 1, 'ED', False, coordinates)
-        >>> graph.add_bidirectional_roads('D', 'C', 1, 'DC', False, coordinates)
-        >>> graph.add_bidirectional_roads('A', 'E', 7, 'AE', False, coordinates)
-        >>> shortest_path_result = graph.compute_shortest_path('A', 'D')
-        >>> (shortest_path_result[0].get_all_possible_paths()[0], shortest_path_result[1])
-        (['A', 'B', 'C', 'D'], 4.0)
+        >>> graph.add_bidirectional_roads('A', 'B', 4, 'AB', False, coordinates)
+        >>> graph.add_bidirectional_roads('A', 'D', 5, 'AD', False, coordinates)
+        >>> graph.add_bidirectional_roads('B', 'C', 4, 'BC', False, coordinates)
+        >>> graph.add_bidirectional_roads('B', 'D', 1, 'BC', False, coordinates)
+        >>> graph.add_bidirectional_roads('C', 'D', 3, 'CD', False, coordinates)
+        >>> graph.add_bidirectional_roads('C', 'E', 1, 'CE', False, coordinates)
+        >>> graph.add_bidirectional_roads('D', 'E', 4, 'DE', False, coordinates)
+        >>> shortest_path_result: ShortestPathResult = graph.compute_shortest_path('A', 'E')
+        >>> (shortest_path_result.all_shortest_paths),
+        ([['A', 'D', 'E'], ['A', 'D', 'C', 'E'], ['A', 'B', 'C', 'E'], ['A', 'B', 'D', 'E'],  ['A', 'B', 'C', 'E']], 9.0)
         """
         # the dijktras code for this was inspired by https://cp-algorithms.com/graph/dijkstra.html, with major
         # changes to it to make it fast, return shortest paths also and not only distance, and to make it
@@ -95,84 +95,127 @@ class Graph:
         visited: set[str] = set()
         all_shortest_paths_computed: set[str] = set()
 
-        infinity: float = 100_000_000_000.0  # 100 million km, no road segment could be
-        # that big without a junction being somewhere
-        distance: dict[str, list[list[str] | float]] = {}
+        infinity: float = 100_000_000_000_000.0  # 100 billion km, Ontario road network
+        # road length sum should not be that big
+        distance: dict[str, ShortestDistanceToVertex] = {}
 
         for vertex in self.vertices:
             if vertex == source_junction_id:
-                distance[vertex] = [[], 0]
+                # distance from source_junction_id to source_junction_id
+                # is always 0.0
+                distance[vertex] = ShortestDistanceToVertex(
+                    junction_id=vertex,
+                    shortest_distance_till_now=0.0,
+                    shortest_paths_prev_vertex_ids=[]
+                )
             else:
-                distance[vertex] = [[], infinity]
+                distance[vertex] = ShortestDistanceToVertex(
+                    junction_id=vertex,
+                    shortest_distance_till_now=infinity,
+                    shortest_paths_prev_vertex_ids=[]
+                )
 
-        road_distance_list: list[tuple[float, _Vertex, _Vertex]] = []
+        len_minimizer_candidate_roads: list[LenMinimizerCandidateRoad] = []
 
         # heap related code adapted from https://docs.python.org/3/library/heapq.html
-        heapify(road_distance_list)
+        # we are using a min heap because it is like a priority queue with push
+        # Big O time and pop Big O time as O(n) where n is the number of
+        # elements inside it. See https://stackoverflow.com/a/38833175 for
+        # time complexity of these heap methods
+        heapify(len_minimizer_candidate_roads)
 
         source_vertex: _Vertex = self.vertices[source_junction_id]
 
-        heappush(road_distance_list, (0, source_vertex, source_vertex))
+        heappush(len_minimizer_candidate_roads, LenMinimizerCandidateRoad(
+            distance=0.0,
+            start_junction=source_vertex,
+            end_junction=source_vertex
+        ))
 
-        while len(road_distance_list) > 0:
-            least_distance_road: tuple[float, _Vertex, _Vertex] = heappop(road_distance_list)
+        while len(len_minimizer_candidate_roads) > 0:
+            # heap pop gives us the road with the least length attribute
+            len_minimizer_candidate_road: LenMinimizerCandidateRoad = heappop(len_minimizer_candidate_roads)
 
-            current_vertex: _Vertex = least_distance_road[1]
+            current_vertex: _Vertex = len_minimizer_candidate_road.end_junction
             current_vertex_id: str = current_vertex.junction_id
 
-            if distance[current_vertex_id][1] < least_distance_road[0]:
+            if (distance[current_vertex_id].shortest_distance_till_now <
+                    len_minimizer_candidate_road.length_from_source):
+                # all shortest paths have been computed to current_vertex_id,
+                # and any other possible path to it except these paths
+                # is a path with length > distance[current_vertex_id].shortest_distance_till_now
                 all_shortest_paths_computed.add(current_vertex_id)
             else:
                 visited.add(current_vertex_id)
-                distance[current_vertex_id][0].append(least_distance_road[2].junction_id)
+                distance[current_vertex_id].shortest_paths_prev_vertex_ids.append(
+                    len_minimizer_candidate_road.start_junction.junction_id)
 
             if current_vertex_id == target_junction_id and target_junction_id in all_shortest_paths_computed:
                 #  Our modified Dijktras guarantees that if this branch executes,
-                #  then it has there exists no other shortest path in the graph from source_junction_id
-                #  to target_junction_id
+                #  then it is true that there exists no other shortest path
+                #  in the graph from source_junction_id to target_junction_id apart from
+                #  what we already have indirectly stored in distance list
                 break
             else:
                 neighbours: list[Road] = current_vertex.neighbours
 
                 for road in neighbours:
+                    # relaxation step of Dijktras algorithm
                     neighbour_junction: _Vertex = road.to_junction
                     neighbour_junction_id: str = neighbour_junction.junction_id
 
                     # don't minimize distance for something already in visited set, it already has the shortest
                     # distance
-                    if neighbour_junction_id not in visited:
-                        distance_min_candidate: list[list[str] | float] = distance[neighbour_junction_id]
-                        potentially_less_distance: float = least_distance_road[0] + road.length * 1.0
+                    if neighbour_junction_id not in all_shortest_paths_computed:
+                        shortest_dist_till_now_info: ShortestDistanceToVertex = distance[neighbour_junction_id]
+                        potentially_less_distance: float = (
+                                len_minimizer_candidate_road.length_from_source + road.length * 1.0)
                         # multiply by 1.0 to ensure the result is a float and not an int
 
-                        if distance_min_candidate[1] >= potentially_less_distance:
+                        if shortest_dist_till_now_info.shortest_distance_till_now >= potentially_less_distance:
 
-                            # distance[neighbour_junction_id] = (current_vertex, potentially_less_distance)
-                            # distance[neighbour_junction_id] = (current_vertex, potentially_less_distance)
-                            distance_min_candidate[1] = potentially_less_distance
+                            shortest_dist_till_now_info.shortest_distance_till_now = potentially_less_distance
 
-                            heappush(road_distance_list, (distance[neighbour_junction_id][1],
-                                                          neighbour_junction, current_vertex))
+                            heappush(len_minimizer_candidate_roads, (LenMinimizerCandidateRoad(
+                                length_from_source=distance[neighbour_junction_id].shortest_distance_till_now,
+                                start_junction=neighbour_junction,
+                                end_junction=current_vertex)
+                            ))
 
-        shortest_path_info: list[list[str] | float] = distance[target_junction_id]
-        shortest_path_node_list: list[str] = shortest_path_info[0]
+        shortest_path_info: ShortestDistanceToVertex = distance[target_junction_id]
+        shortest_path_node_list: list[str] = shortest_path_info.shortest_paths_prev_vertex_ids
 
         tree: PathTree = PathTree(target_junction_id)
 
-        self._add(tree, source_junction_id, shortest_path_node_list, distance)
+        self._add_subtrees_from_list(
+            tree=tree,
+            source=source_junction_id,
+            children_to_add=shortest_path_node_list,
+            distance=distance
+        )
 
-        shortest_path_length: float = shortest_path_info[1]
+        return ShortestPathResult(
+            length=shortest_path_info.shortest_distance_till_now,
+            all_shortest_paths=tree.get_all_possible_paths(),
+        )
 
-        return tree, shortest_path_length
-
-    def _add(self, tree: PathTree, source: str, children_to_add: list[str],
-             distance: dict[str, list[list[str] | float]]) -> None:
+    def _add_subtrees_from_list(self, tree: PathTree, source: str, children_to_add: list[str],
+                                distance: dict[str, ShortestDistanceToVertex]) -> None:
+        """
+        Mutating helper method
+        TODO: continue this
+        """
         if children_to_add[0] == source:
             tree.add_subtree(PathTree(children_to_add[0]))
         else:
             for child in children_to_add:
                 child_subtree: PathTree = PathTree(child)
-                self._add(child_subtree, source, distance[child][0], distance)
+                self._add_subtrees_from_list(
+                    child_subtree,
+                    source,
+                    distance[child].shortest_paths_prev_vertex_ids,
+                    distance
+                )
                 tree.add_subtree(child_subtree)
 
     def remove_road(self, road_id: str) -> None:

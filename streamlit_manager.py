@@ -11,6 +11,9 @@ class StreamlitManager:
     _info_display_state: InfoDisplayState
 
     def __init__(self) -> None:
+        """
+        Initialize StreamlitManager with the Ontario road network data and default display settings.
+        """
         self._road_manager = RoadManager()
         self._roads = {road_id: UIRoad(road=road, visible=True, colour='blue')
                        for road_id, road in self._road_manager.graph.roads.items()}

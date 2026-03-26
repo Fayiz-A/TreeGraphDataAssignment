@@ -7,9 +7,21 @@ from file_loader import FileLoader
 
 
 class RoadManager:
+    """
+    A class that manages the road network graph.
+
+    Instance Attributes:
+        - graph: a Graph that represents the Ontario road network.
+
+    Representation Invariants:
+        - graph is not None
+    """
     graph: Graph
 
     def __init__(self) -> None:
+        """
+        Initialize RoadManager with the Ontario road network data.
+        """
         self.graph = Graph()
         self.fetch_data_and_build_graph(FileLoader('data/ontario_road_network.geojson.gz'))
         # TODO: replace with constant from constants.py

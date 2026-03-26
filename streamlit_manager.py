@@ -35,12 +35,12 @@ class StreamlitManager:
     def _update_visible_roads_by_bounds(self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
         """
         Updates the map zoom level to the given zoom level and updates the visible roads. If the zoom level
-        will be updated to 0, all the roads should be visible.
+        will be updated to the maximum zoom, all the roads should be visible.
 
         Preconditions:
             - 0 <= zoom_level <= 19
         """
-        if zoom_level == 0:
+        if zoom_level == self.MAX_ZOOM:
             for ui_road in self._roads.values():
                 ui_road.visible = True
             return
@@ -56,7 +56,7 @@ class StreamlitManager:
             road: Road = ui_road.road
             length: float = road.length
 
-            length_check: bool = length <= length_bound
+            length_check: bool = length >= length_bound
             bounds_check: bool = True
 
             if length_check:

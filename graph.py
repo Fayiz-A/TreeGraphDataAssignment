@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import doctest
 from heapq import heapify, heappop, heappush
 from typing import Optional
 
+import python_ta
 from python_ta.contracts import check_contracts
 
 from dataclasses import dataclass
 from coordinate import Coordinate
-from tree import Tree
+from path_tree import PathTree
 
 
 @dataclass
@@ -60,7 +62,7 @@ class Graph:
 
     @check_contracts
     def compute_shortest_path(self, source_junction_id: str, target_junction_id: str) ->\
-            Optional[tuple[Tree, float]]:
+            Optional[tuple[PathTree, float]]:
         """
         Compute and return the shortest path between source junction id and target junction id and its length in
         metres. In case multiple shortest paths of same length exist, return one of them along with its length.
@@ -84,9 +86,12 @@ class Graph:
         >>> graph.add_bidirectional_roads('D', 'C', 1, 'DC', False, coordinates)
         >>> graph.add_bidirectional_roads('A', 'E', 7, 'AE', False, coordinates)
         >>> shortest_path_result = graph.compute_shortest_path('A', 'D')
-        >>> (shortest_path_result[0].get_values()[::-1], shortest_path_result[1])
+        >>> (shortest_path_result[0].get_all_possible_paths()[0], shortest_path_result[1])
         (['A', 'B', 'C', 'D'], 4.0)
         """
+        # the dijktras code for this was inspired by https://cp-algorithms.com/graph/dijkstra.html, with major
+        # changes to it to make it fast, return shortest paths also and not only distance, and to make it
+        # suitable for returning multiple shortest equivalent paths.
         visited: set[str] = set()
         all_shortest_paths_computed: set[str] = set()
 
@@ -100,24 +105,26 @@ class Graph:
             else:
                 distance[vertex] = [[], infinity]
 
-        road_distance_list: list[tuple[float, _Vertex]] = []
+        road_distance_list: list[tuple[float, _Vertex, _Vertex]] = []
 
         # heap related code adapted from https://docs.python.org/3/library/heapq.html
         heapify(road_distance_list)
 
         source_vertex: _Vertex = self.vertices[source_junction_id]
 
-        heappush(road_distance_list, (0, source_vertex))
+        heappush(road_distance_list, (0, source_vertex, source_vertex))
 
         while len(road_distance_list) > 0:
-            least_distance_road: tuple[float, _Vertex] = heappop(road_distance_list)
+            least_distance_road: tuple[float, _Vertex, _Vertex] = heappop(road_distance_list)
 
             current_vertex: _Vertex = least_distance_road[1]
             current_vertex_id: str = current_vertex.junction_id
 
-            visited.add(current_vertex_id)
-            if current_vertex_id in visited and distance[current_vertex_id][1] < least_distance_road[0]:
+            if distance[current_vertex_id][1] < least_distance_road[0]:
                 all_shortest_paths_computed.add(current_vertex_id)
+            else:
+                visited.add(current_vertex_id)
+                distance[current_vertex_id][0].append(least_distance_road[2].junction_id)
 
             if current_vertex_id == target_junction_id and target_junction_id in all_shortest_paths_computed:
                 #  Our modified Dijktras guarantees that if this branch executes,
@@ -144,43 +151,29 @@ class Graph:
                             # distance[neighbour_junction_id] = (current_vertex, potentially_less_distance)
                             distance_min_candidate[1] = potentially_less_distance
 
-                            heappush(road_distance_list, (distance[neighbour_junction_id][1], neighbour_junction))
+                            heappush(road_distance_list, (distance[neighbour_junction_id][1],
+                                                          neighbour_junction, current_vertex))
 
         shortest_path_info: list[list[str] | float] = distance[target_junction_id]
         shortest_path_node_list: list[str] = shortest_path_info[0]
 
-        tree: Tree = Tree(target_junction_id)
-        subtree: Optional[Tree] = None
+        tree: PathTree = PathTree(target_junction_id)
 
-        for shortest_path_node in shortest_path_node_list:
-            shortest_path_node_list_len: int = len(shortest_path_node_list)
-            while shortest_path_node_list_len > 1 and shortest_path_node_list_len != 1 or shortest_path_node_list[0] != source_junction_id:
-                subtree_to_add: Tree = Tree(shortest_path_node)
-                if subtree is None:
-                    # we got into this loop for the first time
-                    tree.add_subtree(subtree_to_add)
-                else:
-                    subtree.add_subtree(subtree_to_add)
-
-                subtree = subtree_to_add
-
-                # junction_id: str = shortest_path_node.junction_id
-                #
-                # shortest_path_node = distance[junction_id][0]  # this gives us what vertex was the one
-                # from which we marked as visited our junction_id vertex (meaning shortest path to it was found)
-                # this shortest_path_node vertex is the last vertex before junction_id in one of the shortest
-                # paths, which is what we currently support only for now
-
-        if subtree is None:
-            # loop did not execute even once
-            # TODO: see if this no execution of loop is ok
-            tree.add_subtree(Tree(source_junction_id))
-        else:
-            subtree.add_subtree(Tree(source_junction_id))
+        self._add(tree, source_junction_id, shortest_path_node_list, distance)
 
         shortest_path_length: float = shortest_path_info[1]
 
         return tree, shortest_path_length
+
+    def _add(self, tree: PathTree, source: str, children_to_add: list[str],
+             distance: dict[str, list[list[str] | float]]) -> None:
+        if children_to_add[0] == source:
+            tree.add_subtree(PathTree(children_to_add[0]))
+        else:
+            for child in children_to_add:
+                child_subtree: PathTree = PathTree(child)
+                self._add(child_subtree, source, distance[child][0], distance)
+                tree.add_subtree(child_subtree)
 
     def remove_road(self, road_id: str) -> None:
         """
@@ -252,3 +245,11 @@ class Graph:
 
     def check_is_neighbour(self, road_id_1: str, road_id_2: str) -> bool:
         pass
+
+
+if __name__ == '__main__':
+    doctest.testmod(verbose=True)
+
+    python_ta.check_all(
+        module_name='graph.py'
+    )

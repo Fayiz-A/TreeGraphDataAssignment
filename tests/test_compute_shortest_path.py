@@ -9,7 +9,7 @@ from coordinate import Coordinate
 from graph import Graph, _Vertex
 from math import isclose
 
-from tree import Tree
+from path_tree import PathTree
 
 
 def _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num: int) -> tuple[nx.DiGraph, Graph]:
@@ -53,13 +53,22 @@ def test_compute_shortest_path() -> None:
     nx_graph: nx.DiGraph = graphs[0]
     test_graph: Graph = graphs[1]
 
-    shortest_path_matrix = dict(nx.all_pairs_dijkstra_path_length(nx_graph))
+    shortest_path_matrix = dict(nx.all_pairs_dijkstra_path(nx_graph))
+    shortest_path_length_matrix = dict(nx.all_pairs_dijkstra_path_length(nx_graph))
 
     test_graph_vertices: dict[str, _Vertex] = test_graph.vertices
 
     for start_vertex in test_graph_vertices:
         for end_vertex in test_graph_vertices:
             if start_vertex != end_vertex:
-                actual_shortest_path: tuple[Tree, float] =\
+                actual_shortest_path: tuple[PathTree, float] =\
                     test_graph.compute_shortest_path(str(start_vertex), str(end_vertex))
-                assert isclose(actual_shortest_path[1], shortest_path_matrix[int(start_vertex)][int(end_vertex)])
+
+                start_vertex_int: int = int(start_vertex)
+                end_vertex_int: int = int(end_vertex)
+
+                all_possible_paths: list[list[str]] = actual_shortest_path[0].get_all_possible_paths()
+                assert ([str(vertex) for vertex in shortest_path_matrix[start_vertex_int][end_vertex_int]] in
+                        all_possible_paths)
+                assert isclose(actual_shortest_path[1],
+                               shortest_path_length_matrix[start_vertex_int][end_vertex_int])

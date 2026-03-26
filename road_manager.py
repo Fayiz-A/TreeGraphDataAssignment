@@ -21,6 +21,7 @@ class RoadManager:
             - len(road_ids) > 0
             - source_junction is a valid junction represented by a string.
             - target_junction is a valid junction represented by a string.
+            - All road ids in road_ids are removable.
         """
         for road_id in road_ids:
             self.graph.remove_road(road_id)

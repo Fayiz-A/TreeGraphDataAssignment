@@ -22,16 +22,10 @@ class RoadManager:
             - source_junction is a valid junction represented by a string.
             - target_junction is a valid junction represented by a string.
         """
-        lst: list = []
         for road_id in road_ids:
-            lst.append(self.graph.roads[road_id])
+            self.graph.remove_road(road_id)
 
-        if self.check_removability(lst):
-            for road_id in road_ids:
-                self.graph.remove_road(road_id)
-            return self.graph.compute_shortest_path(source_junction, target_junction)
-
-        return []
+        return self.graph.compute_shortest_path(source_junction, target_junction)
 
     def check_removability(self, roads: list[Road]) -> bool:
         pass

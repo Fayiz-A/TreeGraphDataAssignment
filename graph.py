@@ -12,7 +12,7 @@ from typing import Optional
 import python_ta
 from python_ta.contracts import check_contracts
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from coordinate import Coordinate
 from path_tree import PathTree
 
@@ -33,15 +33,21 @@ class ShortestPathResult:
         over which the algorithm was run.
         - all_shortest_paths: a collection of all shortest
         paths from source vertex to target vertex which have
-        are length meters long.
+        are self.length meters long. A shortest path here is a list
+        of tuple, with first element of all tuples being a vertex id,
+        the second element of all tuples (expect last one, which is just going to be an emtpy string) is the road id
+        that the next vertex (next tuple's first argument) is connected to.
+
 
     Representation Invariants:
         - self.length >= 0
         - self.length != 0 or len(self.all_shortest_paths) == 1 and len(self.all_shortest_paths[0] == 1)
         - self.length == 0 if and only if self.all_shortest_paths contains list with element origin
+        - len(self.all_shortest_paths) > 0
+        - all(len(shortest_path) >= 2 and shortest_path[-1][1] == '' for shortest_path in self.all_shortest_paths)
     """
     length: float
-    all_shortest_paths: list[list[str]]
+    all_shortest_paths: list[list[tuple[str, str]]]
 
 
 # dataclass order and field method code seen from https://stackoverflow.com/a/72330706
@@ -221,16 +227,19 @@ class Graph:
         >>> for i in range(65, 70):
         ...     graph.add_junction(chr(i))
         >>> coordinates: list[Coordinate] = [Coordinate(78, 100), Coordinate(79, 101)]
-        >>> graph.add_bidirectional_roads('A', 'B', 4, 'AB', False, coordinates)
-        >>> graph.add_bidirectional_roads('A', 'D', 5, 'AD', False, coordinates)
-        >>> graph.add_bidirectional_roads('B', 'C', 4, 'BC', False, coordinates)
-        >>> graph.add_bidirectional_roads('B', 'D', 1, 'BD', False, coordinates)
-        >>> graph.add_bidirectional_roads('C', 'D', 3, 'CD', False, coordinates)
-        >>> graph.add_bidirectional_roads('C', 'E', 1, 'CE', False, coordinates)
-        >>> graph.add_bidirectional_roads('D', 'E', 4, 'DE', False, coordinates)
+        >>> graph.add_bidirectional_roads('A', 'B', 4, 'A->B', False, coordinates)
+        >>> graph.add_bidirectional_roads('A', 'D', 5, 'A->D', False, coordinates)
+        >>> graph.add_bidirectional_roads('B', 'C', 4, 'B->C', False, coordinates)
+        >>> graph.add_bidirectional_roads('B', 'D', 1, 'B->D', False, coordinates)
+        >>> graph.add_bidirectional_roads('C', 'D', 3, 'C->D', False, coordinates)
+        >>> graph.add_bidirectional_roads('C', 'E', 1, 'C->E', False, coordinates)
+        >>> graph.add_bidirectional_roads('D', 'E', 4, 'D->E', False, coordinates)
         >>> shortest_path_result: ShortestPathResult = graph.compute_shortest_path('A', 'E')
-        >>> (sorted(shortest_path_result.all_shortest_paths, key=lambda item: ''.join(item)), shortest_path_result.length)
-        ([['A', 'B', 'C', 'E'], ['A', 'B', 'D', 'C', 'E'], ['A', 'B', 'D', 'E'], ['A', 'D', 'C', 'E'], ['A', 'D', 'E']], 9.0)
+        >>> sorted(shortest_path_result.all_shortest_paths, key=lambda shortest_path:
+        ... ''.join([item[0] for item in shortest_path]))
+        [[('A', 'A->B'), ('B', 'B->C'), ('C', 'C->E'), ('E', '')], [('A', 'A->B'), ('B', 'B->D'), ('D', 'reverse-C->D'), ('C', 'C->E'), ('E', '')], [('A', 'A->B'), ('B', 'B->D'), ('D', 'D->E'), ('E', '')], [('A', 'A->D'), ('D', 'reverse-C->D'), ('C', 'C->E'), ('E', '')], [('A', 'A->D'), ('D', 'D->E'), ('E', '')]]
+        >>> shortest_path_result.length
+        9.0
         """
 
         # the dijktras code for this was inspired by https://cp-algorithms.com/graph/dijkstra.html, with major
@@ -344,45 +353,64 @@ class Graph:
                                 potentially_less_distance,
                                 current_vertex_id,
                                 neighbour_junction_id,
-                                road.road_id
-                            )
+                                road.road_id,)
                             )
 
         shortest_path_info: list[str | float | set[tuple[str, str]]] = distance[target_junction_id]
-        shortest_path_node_set: set[tuple[str, str]] = shortest_path_info[2]
+        shortest_path_length: float = shortest_path_info[1]
 
-        tree: PathTree = PathTree(target_junction_id)
+        if shortest_path_length == infinity:
+            return None
+        else:
+            shortest_path_node_set: set[tuple[str, str]] = shortest_path_info[2]
 
-        self._add_subtrees_from_list(
-            tree=tree,
-            source=source_junction_id,
-            children_to_add=shortest_path_node_set,
-            distance=distance
-        )
+            tree: PathTree = PathTree((target_junction_id, ''))  # target junction id does not connect to
+            # further roads, check representation invariants of ShortestPathResult
 
-        return ShortestPathResult(
-            length=shortest_path_info[1],
-            all_shortest_paths=tree.get_all_possible_paths(),
-        )
+            self._add_subtrees_from_list(
+                tree=tree,
+                source=source_junction_id,
+                children_to_add=shortest_path_node_set,
+                distance=distance
+            )
+
+            return ShortestPathResult(
+                length=shortest_path_length,
+                all_shortest_paths=tree.get_all_possible_paths(),
+            )
 
     def _add_subtrees_from_list(self, tree: PathTree, source: str, children_to_add: set[tuple[str, str]],
-                                distance: dict[str, list[str | float | set[str]]]) -> None:
+                                distance: dict[str, list[str | float | set[tuple[str, str]]]]) -> None:
         """
-        Mutating helper method
-        TODO: continue this
+        Given a PathTree with target junction id as its root, reconstruct all possible shortest paths from that
+        to source using distance dictionary constructed from Dijktras algorithm and children_to_add.
+        children_to_add consists as first tuple argument of the neighbours of tree.root junction id that lie along the
+        shortest path from source to tree.root, along with the road id that those neighbours use in the
+        shortest path as second tuple argument.
+
+        This is a mutating helper recursuve method
+
+        Preconditions:
+            - source.strip() in self.vertices
+            - distance is a validly constructed dictionary from Dijktras algorithm after it has been run from
+            source to target. For definition of distance, see self.compute_shortest_path method where distance
+            is declared.
+            - children_to_add consists of all neighbours of tree.root that lie along shortest path from source to
+            tree.root, along with the specific road ids that the neighbour uses to connected to tree.root
         """
         for child in children_to_add:
-            child_subtree: PathTree = PathTree(child[0])
+            child_subtree: PathTree = PathTree(child)
 
             # we have reached our source junction
             # id if this condition is False and the
             # if branch doesn't execute. This non-execution
             # of if branch is our base case.
-            if child != source:
+            junction_id: str = child[0]
+            if junction_id != source:
                 self._add_subtrees_from_list(
                     child_subtree,
                     source,
-                    distance[child][2],
+                    distance[junction_id][2],
                     distance
                 )
             tree.add_subtree(child_subtree)

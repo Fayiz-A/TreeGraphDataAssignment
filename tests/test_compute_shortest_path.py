@@ -3,13 +3,13 @@ Unit test suite for Graph.compute_shortest_path method using network x's dijktra
 """
 
 import networkx as nx
-from random import random
+from random import random, randint
 
 from coordinate import Coordinate
 from graph import Graph, ShortestPathResult, _Vertex
 from math import isclose
 
-from path_tree import PathTree
+import timeit
 
 
 def _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num: int) -> tuple[nx.DiGraph, Graph]:
@@ -67,8 +67,36 @@ def test_compute_shortest_path() -> None:
                 start_vertex_int: int = int(start_vertex)
                 end_vertex_int: int = int(end_vertex)
 
-                all_possible_paths: list[list[str]] = actual_shortest_path.all_shortest_paths
+                all_possible_paths: list[list[str]] = [[vertex_info[0]
+                                                       for vertex_info in shortest_path]
+                                                       for shortest_path in actual_shortest_path.all_shortest_paths]
+
                 assert ([str(vertex) for vertex in shortest_path_matrix[start_vertex_int][end_vertex_int]] in
                         all_possible_paths)
                 assert isclose(actual_shortest_path.length,
                                shortest_path_length_matrix[start_vertex_int][end_vertex_int])
+
+
+def test_time_compute_shortest_path() -> None:
+    graphs: tuple[nx.DiGraph, Graph] = \
+        _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num=1000)  # approximately
+    # 500,000 edges/roads
+
+    vertices = list(graphs[1].vertices.keys())
+
+    seconds: float = timeit.timeit(
+        'graphs[1].compute_shortest_path(vertices[0], vertices[randint(0, 1000)])',
+        number=10, globals={'graphs': graphs, 'vertices': vertices, 'randint': randint})  # should take at most about
+    # about 40 million iterations per method call at most due to
+    # 500,000 edges (considering constant factors also roughly), so in total about
+    # 40 million * 10 times we call compute_shortest_path = appproximately
+    # 400 million iterations at most.
+    # We have about 2 million roads in our data, so compute_shortest_path would take about 200 million iterations
+    # at most as it is O(ElogE) where E is the number of edges (not theta, but big O) and we are also thinking about
+    # constant factors roughly speaking here. If seconds variable comes out to be under 2 seconds,
+    # then compute_shortest_path method for our data would work in way less than that time.
+
+    # note: the doctest might take more time than seconds, as it includes time for
+    # _generate_random_directed_weighted_complete_graphs_for_testing method also, but
+    # what matters is the time taken by
+    assert seconds < 2

@@ -6,8 +6,6 @@ for use for representing Paths from a source node
 from __future__ import annotations
 from typing import Optional
 
-from tensorflow.python.framework.errors_impl import UnimplementedError
-
 
 class PathTree:
     """
@@ -27,9 +25,9 @@ class PathTree:
     """
 
     subtrees: list[PathTree]
-    root: Optional[str]
+    root: Optional[tuple[str, str]]
 
-    def __init__(self, root: str) -> None:
+    def __init__(self, root: tuple[str, str]) -> None:
         """
         TODO: check if constructors need docstrings, preconditions etc
         """
@@ -53,13 +51,14 @@ class PathTree:
 
         self.subtrees.append(subtree)
 
-    def get_values(self) -> list[str]:
+    def get_values(self) -> list[tuple[str, str]]:
         """
         Get all values of this tree as a list.
 
-        There are no preconditions to use this method
+        Preconditions:
+            - self.root is not None
         """
-        values: list[str] = [self.root]
+        values: list[tuple[str, str]] = [self.root]
         for subtree in self.subtrees:
             values.extend(subtree.get_values())
 
@@ -71,23 +70,25 @@ class PathTree:
 
         Preconditions:
             - depth >= 0
+            - self.root is not None
         """
         print(f'{'-' * depth}{self.root}')
 
         for subtree in self.subtrees:
             subtree.print_values(depth + 1)
 
-    def get_all_possible_paths(self) -> list[list[str]]:
+    def get_all_possible_paths(self) -> list[list[tuple[str, str]]]:
         """
         Return all possible paths from the root to each leaf node.
 
-        There are no preconditions to use this method.
+        Preconditions:
+            - self.root is not None
         """
 
-        possible_paths: list[list[str]] = []
+        possible_paths: list[list[tuple[str, str]]] = []
 
         subtrees: list[PathTree] = self.subtrees
-        root: str = self.root
+        root: tuple[str, str] = self.root
 
         if len(subtrees) == 0:
             return [[root]]

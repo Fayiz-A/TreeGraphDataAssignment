@@ -45,7 +45,7 @@ def _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num:
 def test_compute_shortest_path() -> None:
     # making this around 100 would make the test case very slow, due to there being a complete graph
     # generated below, and all of its shortest paths from all possible start and end pairs being checked
-    vertices_num: int = 10
+    vertices_num: int = 50
 
     graphs: tuple[nx.DiGraph, Graph] =\
         _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num)

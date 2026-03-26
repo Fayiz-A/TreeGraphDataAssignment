@@ -1,3 +1,8 @@
+"""
+This file contains code for Graph class and its shortest path (modified) multi shortest path
+finding Dijktras algorithm code.
+"""
+
 from __future__ import annotations
 
 import doctest
@@ -46,6 +51,11 @@ class LenMinimizerCandidateRoad:
     """
     A dataclass to represent a candidate shorter road in Dijktras algorithm.
 
+    NOTE: This is what we were supposed to originally use, but we shifted to using a list/tuple due to reasons
+    explained by the comment on variable in code below which was supposed to use this. However, this dataclass
+    is not removed as it helps in reasoning about our code, documentation and representation
+    invariants of the list/tuples which represents the same data as this dataclass.
+
     This is what gets added to a distance array which is iterated over
     in the while loop of Djiktras. The order=True attribute of this dataclass
     takes care of how priority queue/heap uses it for comparison, and hence
@@ -54,27 +64,30 @@ class LenMinimizerCandidateRoad:
 
     Instance Attributes:
         - length_from_source: the length of the candidate shorter road in meters *from source* to end_junction.
-        - start_junction: the junction/vertex of where this road
+        - start_junction_id: the junction id of where this road
         starts from
-        - end_junction: the junction/vertex of where this road
+        - end_junction_id: the junction id of where this road
         connects to (meaning where its end junction is)
+        - road_id: the id of road which connects the start and end junction ids
 
     Representation Invariants:
         - self.length_from_source >= 0
-        - self.length_from_source != 0 or self.start_junction.junction_id == self.end_junction.junction_id
-        - self.length_from_source == 0 if and only if the self.start_junction.junction_id is
-        the origin and end_junction.junction_id is the
-        origin (typically the first road/edge added to
+        - self.length_from_source != 0 or self.start_junction_id == self.end_junction_id
+        - self.length_from_source == 0 if and only if the self.start_junction_id is
+        the origin and self.end_junction_id is the origin (typically the first road/edge added to
         Dijktras while loop variable)
+        - self.start_junction_id == self.end_junction_id if and only if self.start_junction_id is origin/source vertex
         - len(self.start_junction_id.strip()) > 0
+        - len(self.road_id.strip()) == 0 if and only if self.start_junction_id == self.end_junction_id
         - len(self.end_junction_id.strip()) > 0
-        - both start_junction and end_junction are valid
+        - both self.start_junction_id and self.end_junction_id represent valid
         junctions (vertices) present in the graph over which this
         class is being used in the graph's Dijktras algorithm
     """
-    start_junction: _Vertex = field(compare=False)
-    end_junction: _Vertex = field(compare=False)
+    start_junction_id: str
+    end_junction_id: str
     length_from_source: float
+    road_id: str
 
 
 @check_contracts
@@ -88,15 +101,22 @@ class ShortestDistanceToVertex:
     junction id this is attached to is our target one (or lies in path
     of even one of the possible shortest path to target junction id)
 
+    NOTE: This is what we were supposed to originally use, but we shifted to using a list/tuple due to reasons
+    explained by the comment on variable in code below which was supposed to use this.
+    However, this dataclass is not removed as it helps in reasoning about our code, documentation and
+    representation invariants of the lists/tuples which represents the same data as this dataclass.
+
     Instance Attributes:
         - shortest_distance_till_now: the length of the shortest
         distance to vertex this is attached to from source
          found till now as per Dijktras algorithm.
-        - shortest_paths_prev_vertex_ids: a set of vertex/junction id of
+        - shortest_paths_prev_vertex_ids: a set of tuple whose first element is vertex/junction id of
         the previous vertices from which the shortest distance from source
         came. This can be used to iterate back till
         the first origin after our version of Dijktras completes
-        to recover the path(s).
+        to recover the path(s). The second argument of tuple is the road id from which the vertex
+        connected to self.junction_id (useful if there is more than one road from that same vertex and they
+        both have the same length)
         - junction_id: the junction_id this represents shortest path to
         from source junction
 
@@ -114,13 +134,13 @@ class ShortestDistanceToVertex:
         represents route to the source itself
         - if len(self.shortest_paths_prev_vertex_ids) > 0, then all paths are
         tracable back to source and can be traced using
-        self.shortest_paths_prev_vertex_ids, and those paths have the same
+        self.shortest_paths_prev_vertex_ids. All those paths have the same
         length, and that length is the shortest length to the
         self.junction_id from source junction.
         - if len(self.shortest_paths_prev_vertex_ids) > 0 and self.junction_id is
         the target junction, then self.shortest_paths_prev_vertex_ids
         should contain all neighbouring junction ids that are connected
-        to it and lie along the shortest path.
+        to it and lie along all shortest paths.
         - len(self.shortest_paths_prev_vertex_ids) == 0 if and only if one
         or more of these scenarios is True:
           - Dijktras did not relax the self.junction_id this corresponds to
@@ -129,11 +149,14 @@ class ShortestDistanceToVertex:
     """
     junction_id: str
     shortest_distance_till_now: float
-    shortest_paths_prev_vertex_ids: set[str]
+    shortest_paths_prev_vertex_ids: set[tuple[str, str]]
 
 
 @dataclass
 class Road:
+    """
+    TODO: write this docstring
+    """
     from_junction: _Vertex
     to_junction: _Vertex
     length: float
@@ -192,6 +215,7 @@ class Graph:
 
         Preconditions:
             - source_junction_id in self.vertices and target_junction_id in self.vertices
+            - source_junction_id != target_junction_id
 
         >>> graph: Graph = Graph()
         >>> for i in range(65, 70):
@@ -208,16 +232,30 @@ class Graph:
         >>> (sorted(shortest_path_result.all_shortest_paths, key=lambda item: ''.join(item)), shortest_path_result.length)
         ([['A', 'B', 'C', 'E'], ['A', 'B', 'D', 'C', 'E'], ['A', 'B', 'D', 'E'], ['A', 'D', 'C', 'E'], ['A', 'D', 'E']], 9.0)
         """
-        #         >>> (sorted(shortest_path_result.all_shortest_paths), shortest_path_result.length) == (expected, 9.0)
+
         # the dijktras code for this was inspired by https://cp-algorithms.com/graph/dijkstra.html, with major
-        # changes to it to make it fast, return shortest paths also and not only distance, and to make it
+        # changes to it to make it O(V + ElogE) where E is the number of edges and V the number of vertices,
+        # to return shortest paths also and not only distance, and to make it
         # suitable for returning multiple shortest equivalent paths.
         visited: set[str] = set()
         all_shortest_paths_computed: set[str] = set()
 
         infinity: float = 1_000_000_000_000.0  # 1 billion km, Ontario road network
         # road length sum should not be that big
-        distance: dict[str, list[str | float | set[str]]] = {}
+
+        # Note: we are using a list here instead of tuple, as we want to
+        # be able to mutate the set and tuples are immutable
+        # this list (value of dictionary) follows the same structure as our
+        # ShortestDistanceToVertex dataclass, with list length always being 3, and its elements
+        # corresponding to ShortestDistanceToVertex's junction_id, shortest_distance_till_now and
+        # shortest_paths_prev_vertex_ids respectively, and also follow the same representation
+        # invariants as that dataclass. Why didn't we use that dataclass then? That's because
+        # tuples/lists are faster than dataclass, and when I used that dataclass instead of what we have now
+        # the code became approximately 20 times slower. This was quite significant for our code,
+        # as we are working with over million edges and about half a million vertices, and
+        # code becoming 20 times slower in Dijktras algorithm meant what would run here in 1 second
+        # would take 20 seconds using dataclasses.
+        distance: dict[str, list[str | float | set[tuple[str, str]]]] = {}
 
         for vertex in self.vertices:
             if vertex == source_junction_id:
@@ -235,7 +273,13 @@ class Graph:
                     set()
                 ]
 
-        len_minimizer_candidate_roads: list[tuple[float, str, str]] = []
+        # this tuple (each element of list) follows the same structure as our
+        # LenMinimizerCandidateRoads dataclass, with tuple length always being 3, and its elements
+        # corresponding to LenMinimizerCandidateRoads's length_from_junction, start_junction_id,
+        # end_junction_id and road id respectively, and this tuple's corresponding arguments follow the
+        # same representation invariants as that dataclass. Why didn't we use that dataclass then? For the same
+        # reason we didn't use dataclass for distance.
+        len_minimizer_candidate_roads: list[tuple[float, str, str, str]] = []
 
         # heap related code adapted from https://docs.python.org/3/library/heapq.html
         # we are using a min heap because it is like a priority queue with push
@@ -249,12 +293,13 @@ class Graph:
         heappush(len_minimizer_candidate_roads, (
             0.0,
             source_vertex_id,
-            source_vertex_id
+            source_vertex_id,
+            ''
         ))
 
         while len(len_minimizer_candidate_roads) > 0:
             # heap pop gives us the road with the least length attribute
-            len_minimizer_candidate_road: tuple[float, str, str] = heappop(len_minimizer_candidate_roads)
+            len_minimizer_candidate_road: tuple[float, str, str, str] = heappop(len_minimizer_candidate_roads)
 
             current_vertex_id: str = len_minimizer_candidate_road[2]
 
@@ -267,7 +312,7 @@ class Graph:
             else:
                 visited.add(current_vertex_id)
                 distance[current_vertex_id][2].add(
-                    len_minimizer_candidate_road[1])
+                    (len_minimizer_candidate_road[1], len_minimizer_candidate_road[3]))
 
             if current_vertex_id == target_junction_id and target_junction_id in all_shortest_paths_computed:
                 #  Our modified Dijktras guarantees that if this branch executes,
@@ -283,8 +328,8 @@ class Graph:
                     neighbour_junction: _Vertex = road.to_junction
                     neighbour_junction_id: str = neighbour_junction.junction_id
 
-                    # don't minimize distance for something already in visited set, it already has the shortest
-                    # distance
+                    # don't minimize distance for something already in all_shortest_paths_computed set, it
+                    # already has all possible shortest paths to it
                     if neighbour_junction_id not in all_shortest_paths_computed:
                         shortest_dist_till_now_info: list[str | float | set[str]] = distance[neighbour_junction_id]
                         potentially_less_distance: float = (
@@ -296,20 +341,22 @@ class Graph:
                             shortest_dist_till_now_info[1] = potentially_less_distance
 
                             heappush(len_minimizer_candidate_roads, (
-                                distance[neighbour_junction_id][1],
+                                potentially_less_distance,
                                 current_vertex_id,
-                                neighbour_junction_id)
+                                neighbour_junction_id,
+                                road.road_id
+                            )
                             )
 
-        shortest_path_info: list[str | float | set[str]] = distance[target_junction_id]
-        shortest_path_node_list: set[str] = shortest_path_info[2]
+        shortest_path_info: list[str | float | set[tuple[str, str]]] = distance[target_junction_id]
+        shortest_path_node_set: set[tuple[str, str]] = shortest_path_info[2]
 
         tree: PathTree = PathTree(target_junction_id)
 
         self._add_subtrees_from_list(
             tree=tree,
             source=source_junction_id,
-            children_to_add=shortest_path_node_list,
+            children_to_add=shortest_path_node_set,
             distance=distance
         )
 
@@ -318,14 +365,14 @@ class Graph:
             all_shortest_paths=tree.get_all_possible_paths(),
         )
 
-    def _add_subtrees_from_list(self, tree: PathTree, source: str, children_to_add: set[str],
+    def _add_subtrees_from_list(self, tree: PathTree, source: str, children_to_add: set[tuple[str, str]],
                                 distance: dict[str, list[str | float | set[str]]]) -> None:
         """
         Mutating helper method
         TODO: continue this
         """
         for child in children_to_add:
-            child_subtree: PathTree = PathTree(child)
+            child_subtree: PathTree = PathTree(child[0])
 
             # we have reached our source junction
             # id if this condition is False and the

@@ -44,15 +44,6 @@ class PathTree:
         """
         return self.root is None
 
-    def is_leaf(self) -> bool:
-        """Return if this tree is a leaf or not. A tree is a leaf if and only if it does not have
-        any subtrees
-
-        There are no preconditions to use this method
-        """
-        # TODO: implement this
-        raise UnimplementedError()
-
     def add_subtree(self, subtree: PathTree):
         """
         Add subtree as a child of this tree

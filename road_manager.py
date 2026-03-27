@@ -15,8 +15,7 @@ class RoadManager:
         """
         Fetch and build the road network graph using data_loader.
 
-        Preconditions:
-            - None
+        There are no preconditions to use this function
         """
         result: DataLoadState = data_loader.load()
 
@@ -24,8 +23,8 @@ class RoadManager:
             print('Failed to load Ontario road network data.')
             return
 
-        data = result.data
-        graph = self._graph
+        data: dict = result.data
+        graph: Graph = self._graph
 
         for feature in data['features']:
             attributes: dict = feature['attributes']

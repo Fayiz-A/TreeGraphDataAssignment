@@ -8,6 +8,9 @@ class FileLoader(DataLoader):
     """
     A DataLoader that loads road network data from a compressed GeoJSON file.
 
+    Instance Attributes:
+        - file_name: path to a .geojson.gz file
+
     Representation Invariants:
         - self.file_name must be a path to a .geojson.gz file
     """
@@ -21,12 +24,15 @@ class FileLoader(DataLoader):
 
     def load(self) -> DataLoadState:
         """
-        Loads and decompresses a .geojson.gz file.
+        Load and decompress a .geojson.gz file, and then return instance of DataLoadErrorState
+        in case of error and DataLoadSuccessState along with the data in case of successful load.
 
         Preconditions:
             - self.file_name points to a valid .geojson.gz file.
         """
         try:
+            # code inspired from https://www.tutorialspoint.com/python/gzip_module.htm and
+            # https://pypi.org/project/geojson/
             with gzip.open(self.file_name, 'r') as f:
                 data = geojson.load(f)
             return DataLoadSuccessState(data)

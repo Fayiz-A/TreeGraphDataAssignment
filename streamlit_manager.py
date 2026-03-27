@@ -54,7 +54,6 @@ class StreamlitManager:
         Display anything which should be displayed using streamlit, as this method is the only method
         that gets rerun as streamlit runs the app from top down on any update.
         """
-        print('displaying')
         # University of Toronto area location coordinates
         folium_map = folium.Map(location=[43.65843379478086, -79.38145637512207], zoom_start=11)
 

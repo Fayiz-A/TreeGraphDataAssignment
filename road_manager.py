@@ -2,13 +2,32 @@ from graph import Graph, Road
 from data_loader import DataLoader
 from data_load_state import DataLoadState, DataLoadSuccessState
 from coordinate import Coordinate
+from file_loader import FileLoader
 
 
 class RoadManager:
-    _graph: Graph
+    """
+    A class that manages the road network graph. This is a service class,
+    meaning that it orchestrates and mediates between the boundary class
+    (meaning class user directly interacts with) of StreamlitManager
+    and entity class (meaning a low level domain (from Uncle Bob's concepts
+    class) of Graph
+
+    Instance Attributes:
+        - graph: a Graph instance that represents the Ontario road network.
+
+    Representation Invariants:
+        - self.graph is not None
+    """
+    graph: Graph
 
     def __init__(self) -> None:
-        self._graph = Graph()
+        """
+        Initialize RoadManager with the Ontario road network data.
+        """
+        self.graph = Graph()
+        self.fetch_data_and_build_graph(FileLoader('data/ontario_road_network.geojson.gz'))
+        # TODO: replace with constant from constants.py
 
     def fetch_data_and_build_graph(self, data_loader: DataLoader) -> None:
         """

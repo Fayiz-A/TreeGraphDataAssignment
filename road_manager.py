@@ -42,7 +42,7 @@ class RoadManager:
             return
 
         data: dict = result.data
-        graph: Graph = self._graph
+        graph: Graph = self.graph
 
         for feature in data['features']:
             attributes: dict = feature['attributes']

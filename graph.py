@@ -170,6 +170,15 @@ class Road:
     removed: bool
     geometry: list[Coordinate]
 
+    def get_geometry_coordinates_tuple(self) -> list[tuple[float, float]]:
+        """
+        Return the geometry Coordinate elements as tuple with the first element of tuple
+        being latitude and second being longitude
+
+        There are no preconditions to use this method.
+        """
+        return [(coordinate.latitude, coordinate.longitude) for coordinate in self.geometry]
+
 
 @dataclass
 class _Vertex:

@@ -33,8 +33,8 @@ class StreamlitManager:
         self._info_display_state = InfoDisplayInitState()
         self._update_visible_roads_by_bounds(
             zoom_level=14,
-            bounds=(Coordinate(43.68984603369737, -79.36489105224611),
-                    Coordinate(43.64638600677007, -79.42711830139162))
+            bounds=(Coordinate(43.68984603369737, -79.42711830139162),
+                    Coordinate(43.64638600677007, -79.36489105224611))
         )
 
     def _handle_road_removal(self) -> None:
@@ -54,6 +54,7 @@ class StreamlitManager:
         Display anything which should be displayed using streamlit, as this method is the only method
         that gets rerun as streamlit runs the app from top down on any update.
         """
+        print('displaying')
         # University of Toronto area location coordinates
         folium_map = folium.Map(location=[43.65843379478086, -79.38145637512207], zoom_start=11)
 
@@ -64,7 +65,7 @@ class StreamlitManager:
             if road.visible:
                 road_data: Road = road.road
                 folium.PolyLine(
-                    locations=road_data.geometry,
+                    locations=road_data.get_geometry_coordinates_tuple(),
                     tooltip=road_data.road_id,
                     color=road.colour
                 ).add_to(folium_map)
@@ -82,5 +83,6 @@ if __name__ == '__main__':
     python_ta.check_all(config={
         'max-line-length': 120,
         'disable': ['static_type_checker'],
-        'extra-imports': ['coordinate', 'info_display', 'road_manager', 'ui_road', 'streamlit_folium', 'folium'],
+        'extra-imports': ['coordinate', 'info_display', 'road_manager', 'ui_road', 'graph',
+                          'streamlit_folium', 'folium'],
     })

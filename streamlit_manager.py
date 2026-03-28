@@ -3,9 +3,11 @@ TODO: add docstring
 """
 import doctest
 import pprint
+from collections.abc import dict_values
+from copy import deepcopy
 from typing import Any
 
-from streamlit import cache_data, cache_resource, session_state
+from streamlit import cache_resource, session_state
 
 from coordinate import Coordinate
 from info_display import InfoDisplayState, InfoDisplayInitState
@@ -77,8 +79,9 @@ class StreamlitManager:
                     Coordinate(43.64638600677007, -79.42711830139162))
         )
 
-        self._update_state('map', self._build_folium_map((Coordinate(43.68984603369737, -79.36489105224611),
-                    Coordinate(43.64638600677007, -79.42711830139162)), 13))
+        self._update_state('map', self._build_folium_map(
+            north_east_bounds=Coordinate(43.68984603369737, -79.36489105224611),
+            zoom=13))
 
     def _handle_road_removal(self) -> None:
         pass
@@ -99,9 +102,7 @@ class StreamlitManager:
                 continue
 
             road: Road = ui_road.road
-            path: list[tuple[float, float]] = [(coordinate.latitude, coordinate.longitude)
-                                               for coordinate in road.geometry]
-            multiline: MultiLineString = MultiLineString([path])
+            multiline: MultiLineString = MultiLineString([road.geometry])
 
             if point_shape.distance(multiline) < threshold:
                 return ui_road
@@ -132,7 +133,8 @@ class StreamlitManager:
         min_latitude: float = min(latitudes)
 
         total: int = 0
-        for ui_road in _self._roads.values():
+        all_roads: dict_values[UIRoad] = _self._roads.values()
+        for ui_road in all_roads:
             road: Road = ui_road.road
             length: float = road.length
 
@@ -143,8 +145,12 @@ class StreamlitManager:
 
             if length_check_passed:
                 for coord in road.geometry:
-                    if (min_latitude <= coord.latitude <= max_latitude and
-                            min_longitude <= coord.longitude <= max_longitude):
+                    # our natural project order
+                    polyline_coordinate_latitude: float = coord[1]
+                    polyline_coordinate_longitude: float = coord[0]
+
+                    if (min_latitude <= polyline_coordinate_latitude <= max_latitude and
+                            min_longitude <= polyline_coordinate_longitude <= max_longitude):
                         bounds_check_passed = True
                         break
 
@@ -201,50 +207,65 @@ class StreamlitManager:
             print('Returning current value')
             return current_value_in_state
 
-    def _build_folium_map(_self, bounds: tuple[Coordinate, Coordinate], zoom: int) -> folium.Map:
+    def _build_folium_map(self, north_east_bounds: Coordinate, zoom: int) -> folium.Map:
         """
         explain why _self not self; and why bounds and zoom not used
         TODO: write docstring
         """
         print('Building folium map')
 
-        north_east_bounds: Coordinate = bounds[0]
-        north_east_bounds_formatted: tuple[float, float] = (
+        north_east_bounds_tuple: tuple[float, float] = (
             north_east_bounds.latitude, north_east_bounds.longitude
         )
         # University of Toronto area location coordinates
-        folium_map: folium.Map = folium.Map(location=north_east_bounds_formatted, zoom_start=zoom)
+        # location needs latitude and longitude coordinates, opposite from our project order,
+        # but since this is just one statement, switching is easy, and hence the order in
+        # north_east_bounds_tuple
+        folium_map: folium.Map = folium.Map(location=north_east_bounds_tuple, zoom_start=zoom)
 
-        # roads: dict[str, UIRoad] = _self._roads
-        # for road_id in roads:
-        #     road: UIRoad = roads[road_id]
-        #
-        #     if road.visible:
-        #         road_data: Road = road.road
-        #         folium.PolyLine(
-        #             locations=road_data.get_geometry_coordinates_tuple(),
-        #             tooltip=road_data.road_id,
-        #             color=road.colour
-        #         ).add_to(folium_map)
-
-        return folium_map
-
-    @cache_resource
-    def add_polylines(_self, _folium_map: folium.Map, bounds: tuple[Coordinate, Coordinate], zoom: int) -> folium.Map:
-        print(f'Adding polylines as per {bounds}')
-        roads: dict[str, UIRoad] = _self._roads
+        roads: dict[str, UIRoad] = self._roads
         for road_id in roads:
             road: UIRoad = roads[road_id]
 
             if road.visible:
                 road_data: Road = road.road
                 folium.PolyLine(
-                    locations=road_data.get_geometry_coordinates_tuple(),
+                    locations=road_data.geometry,
                     tooltip=road_data.road_id,
                     color=road.colour
-                ).add_to(_folium_map)
+                ).add_to(folium_map)
 
-        return _folium_map
+        return folium_map
+
+    @cache_resource
+    def add_polylines(_self, bounds: tuple[Coordinate, Coordinate], zoom: int) -> folium.FeatureGroup:
+        print(f'Adding polylines as per {bounds}')
+
+        feature_group: folium.FeatureGroup = folium.FeatureGroup(name='polylines')
+
+        length: int = 0
+
+        roads: dict[str, UIRoad] = _self._roads
+        for road_id in roads:
+            road: UIRoad = roads[road_id]
+
+            if road.visible:
+                length += 1
+                road_data: Road = road.road
+                polyline: list[tuple[float, float]] = road_data.geometry
+
+                # reversing coordinates here is faster than for our entire dataset, as it is a lot bigger
+                # than the present visible ones.
+                feature_group.add_child(
+                    folium.PolyLine(
+                        locations=[(coordinate[1], coordinate[0]) for coordinate in polyline],
+                        tooltip=road_data.road_id,
+                        color=road.colour
+                    )
+                )
+
+        print(f'Currently added polylines: {length}')
+        return feature_group
 
     def _handle_map_events(self) -> None:
         """
@@ -271,7 +292,6 @@ class StreamlitManager:
         Display anything which should be displayed using streamlit, as this method is the only method
         that gets rerun as streamlit runs the app from top down on any update.
         """
-        print('Displaying')
         state_map_info: dict = self._get_state_value_by_key('map_info')
 
         zoom: int = state_map_info['zoom']
@@ -287,15 +307,17 @@ class StreamlitManager:
         )
 
         folium_map: folium.Map = self._get_state_value_by_key('map')
-        folium_map = self.add_polylines(folium_map, bounds=bounds, zoom=zoom)
-        # call to render Folium map in Streamlit
+        feature_group_polylines: folium.FeatureGroup = self.add_polylines(bounds=bounds, zoom=zoom)
+        feature_group_polylines.add_to(folium_map)
+
         streamlit_folium.st_folium(
             fig=folium_map,
+            feature_group_to_add=feature_group_polylines,
             key='map_info',
             on_change=self._handle_map_events,
-            center=(center['lat'], center['lng'])
+            center=(center['lat'], center['lng']),
+            returned_objects=['last_clicked']
         )
-        pprint.pprint(f'Folium map bounds: {session_state['map_info']['bounds'] if session_state.get(['map_info']) is not None else 'NULL'}')
 
 
 if __name__ == '__main__':

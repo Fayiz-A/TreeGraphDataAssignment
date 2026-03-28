@@ -158,7 +158,10 @@ class ShortestDistanceToVertex:
     shortest_paths_prev_vertex_ids: set[tuple[str, str]]
 
 
-@dataclass
+# the slot trick for Road and _Vertex class was taken from
+# https://towardsdatascience.com/should-you-use-slots-how-slots-affect-your-class-when-and-how-to-use-ab3f118abc71/
+# this makes our dataclass faster
+@dataclass(slots=True)
 class Road:
     """
     TODO: write this docstring
@@ -168,7 +171,7 @@ class Road:
     length: float
     road_id: str
     removed: bool
-    geometry: list[Coordinate]
+    geometry: list[tuple[float, float]]
 
     def get_geometry_coordinates_tuple(self) -> list[tuple[float, float]]:
         """
@@ -177,10 +180,11 @@ class Road:
 
         There are no preconditions to use this method.
         """
-        return [(coordinate.latitude, coordinate.longitude) for coordinate in self.geometry]
+        return []
+        # return [(coordinate.latitude, coordinate.longitude) for coordinate in self.geometry]
 
 
-@dataclass
+@dataclass(slots=True)
 class _Vertex:
     """
     A vertex in the graph, used to represent a junction in the road network.
@@ -235,7 +239,7 @@ class Graph:
         >>> graph: Graph = Graph()
         >>> for i in range(65, 70):
         ...     graph.add_junction(chr(i))
-        >>> coordinates: list[Coordinate] = [Coordinate(78, 100), Coordinate(79, 101)]
+        >>> coordinates: list[tuple[float, float]] = [(78, 100), (79, 101)]
         >>> graph.add_bidirectional_roads('A', 'B', 4, 'A->B', False, coordinates)
         >>> graph.add_bidirectional_roads('A', 'D', 5, 'A->D', False, coordinates)
         >>> graph.add_bidirectional_roads('B', 'C', 4, 'B->C', False, coordinates)
@@ -443,7 +447,7 @@ class Graph:
             self.roads.pop(road_id)
 
     def add_road(self, from_junction_id: str, to_junction_id: str, length: float, road_id: str,
-                 removed: bool, geometry: list[Coordinate]) -> None:
+                 removed: bool, geometry: list[tuple[float, float]]) -> None:
         """
         Creates a road from from_junction_id to to_junction_id and adds it to self.road. If the road already exists,
         the function does nothing
@@ -465,7 +469,7 @@ class Graph:
             junction1.neighbours.append(self.roads[road_id])
 
     def add_bidirectional_roads(self, from_junction_id: str, to_junction_id: str, length: float, road_id: str,
-                                removed: bool, geometry: list[Coordinate]) -> None:
+                                removed: bool, geometry: list[tuple[float, float]]) -> None:
         """
         Creates a road from from_junction_id to to_junction_id and vice versa and
         adds it to self.road. If any of the road already exists, the function does nothing and adds only the

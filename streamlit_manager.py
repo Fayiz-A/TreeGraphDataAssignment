@@ -1,4 +1,5 @@
 from coordinate import Coordinate
+from graph import Road
 from info_display import InfoDisplayState, InfoDisplayInitState
 from road_manager import RoadManager
 from ui_road import UIRoad
@@ -37,14 +38,17 @@ class StreamlitManager:
         Preconditions:
             - isinstance(point, Coordinate)
         """
-        threshold = 0.0005  # TODO: adjust after testing
-        point_shape = Point(point.longitude, point.latitude)
+        threshold: float = 0.0005  # TODO: adjust after testing
+        point_shape: Point = Point(point.latitude, point.longitude)
 
         for ui_road in self._roads.values():
-            if not ui_road.visible or not ui_road.road.geometry:
+            if not ui_road.visible:
                 continue
-            path = [(c.longitude, c.latitude) for c in ui_road.road.geometry]
-            multiline = MultiLineString([path])
+
+            road: Road = ui_road.road
+            path: list[tuple[float, float]] = [(coordinate.latitude, coordinate.longitude)
+                                               for coordinate in road.geometry]
+            multiline: MultiLineString = MultiLineString([path])
 
             if point_shape.distance(multiline) < threshold:
                 return ui_road

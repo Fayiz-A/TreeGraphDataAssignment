@@ -4,6 +4,7 @@ from road_manager import RoadManager
 from ui_road import UIRoad
 import constants
 from graph import Road
+from shapely.geometry import MultiLineString, Point
 
 
 class StreamlitManager:
@@ -43,7 +44,29 @@ class StreamlitManager:
         pass
 
     def _get_road_id_by_selection(self, point: Coordinate) -> UIRoad | None:
-        pass
+        """
+        Return the UIRoad whose geometric polyline is within a threshold distance
+        from the given point, or None if no visible road is close enough.
+
+        Preconditions:
+            - isinstance(point, Coordinate)
+        """
+        threshold: float = 0.0005  # TODO: adjust after testing
+        point_shape: Point = Point(point.latitude, point.longitude)
+
+        for ui_road in self._roads.values():
+            if not ui_road.visible:
+                continue
+
+            road: Road = ui_road.road
+            path: list[tuple[float, float]] = [(coordinate.latitude, coordinate.longitude)
+                                               for coordinate in road.geometry]
+            multiline: MultiLineString = MultiLineString([path])
+
+            if point_shape.distance(multiline) < threshold:
+                return ui_road
+
+        return None
 
     def _update_visible_roads_by_bounds(self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
         """

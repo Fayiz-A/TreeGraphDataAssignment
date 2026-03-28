@@ -108,7 +108,25 @@ class StreamlitManager:
             ui_road.visible = length_check_passed and bounds_check_passed
 
     def reset(self) -> None:
-        pass
+        """
+        Reset StreamlitManager to its initial state by clearing selections,
+        rebuilding the roads, and restoring the default display settings.
+
+        Preconditions:
+            - self._roads and self._selected_roads are initialized
+        """
+        self._selected_roads.clear()
+
+        self._roads = {road_id: UIRoad(road=road, visible=True, colour='blue')
+                       for road_id, road in self._road_manager.graph.roads.items()}
+
+        self._info_display_state = InfoDisplayInitState()
+
+        self._update_visible_roads_by_bounds(
+            zoom_level=14,
+            bounds=(Coordinate(43.68984603369737, -79.36489105224611),
+                    Coordinate(43.64638600677007, -79.42711830139162))
+        )
 
     def display(self) -> None:
         pass

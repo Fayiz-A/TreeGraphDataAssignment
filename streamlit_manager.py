@@ -1,3 +1,4 @@
+import constants
 from coordinate import Coordinate
 from info_display import InfoDisplayState
 from road import Road
@@ -10,7 +11,6 @@ class StreamlitManager:
     _roads: dict[str, UIRoad]
     _selected_roads: dict[str, UIRoad]
     AVERAGE_LENGTH: float
-    MAX_ZOOM: int = 19
     _info_display_state: InfoDisplayState
 
     def __init__(self) -> None:
@@ -34,36 +34,40 @@ class StreamlitManager:
 
     def _update_visible_roads_by_bounds(self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
         """
-        Updates the map zoom level to the given zoom level and updates the visible roads. If the zoom level
-        will be updated to the maximum zoom, all the roads should be visible.
+        Update the visible roads according to the given zoom level, the road will be invisible if all portions are
+        not in the current bounds or the road length is too minor to display. If the zoom level given is equal
+        to or greater than 13, all the roads should be visible.
 
         Preconditions:
-            - 0 <= zoom_level <= 19
+            - 0 <= zoom_level <= constants.MAX_ZOOM
         """
-        if zoom_level == self.MAX_ZOOM:
+        if zoom_level >= 13:
             for ui_road in self._roads.values():
                 ui_road.visible = True
             return
 
-        length_bound: float = (self.MAX_ZOOM - zoom_level + 1) * self.AVERAGE_LENGTH
+        length_bound: float = (constants.MAX_ZOOM - zoom_level + 1) * self.AVERAGE_LENGTH
 
-        max_longitude: float = max(bounds[0].longitude, bounds[1].longitude)
-        min_longitude: float = min(bounds[0].longitude, bounds[1].longitude)
-        max_latitude: float = max(bounds[0].latitude, bounds[1].latitude)
-        min_latitude: float = min(bounds[0].latitude, bounds[1].latitude)
+        northeast_candidate: Coordinate = bounds[0]
+        southwest_candidate: Coordinate = bounds[1]
+
+        max_longitude: float = max(northeast_candidate.longitude, southwest_candidate.longitude)
+        min_longitude: float = min(northeast_candidate.longitude, southwest_candidate.longitude)
+        max_latitude: float = max(northeast_candidate.latitude, southwest_candidate.latitude)
+        min_latitude: float = min(northeast_candidate.latitude, southwest_candidate.latitude)
 
         for ui_road in self._roads.values():
             road: Road = ui_road.road
             length: float = road.length
 
             length_check: bool = length >= length_bound
-            bounds_check: bool = True
+            bounds_check: bool = False
 
             if length_check:
                 for coord in road.geometry:
-                    if not (min_latitude <= coord.latitude <= max_latitude and
+                    if (min_latitude <= coord.latitude <= max_latitude and
                             min_longitude <= coord.longitude <= max_longitude):
-                        bounds_check = False
+                        bounds_check = True
                         break
 
             ui_road.visible = length_check and bounds_check

@@ -14,16 +14,18 @@ class RoadManager:
     def fetch_data_and_build_graph(self, data_loader: DataLoader) -> None:
         pass
 
-    def remove_road_and_get_path(self, road_ids: list[str], source_junction_id: str, target_junction_id: str) -> \
-    Optional[ShortestPathResult]:
+    def remove_road_and_get_path(
+            self, road_ids: list[str], source_junction_id: str, target_junction_id: str
+    ) -> Optional[ShortestPathResult]:
         """
-        Removes all roads in roads_id, and returns a list of roads which make the shortest path from
-        source_junction to target_junction.
+        Remove all roads in roads_id, and return a list of roads which make the shortest path from
+        source_junction_id to target_junction_id.
 
         Preconditions:
             - len(road_ids) > 0
-            - source_junction is a valid junction represented by a string.
-            - target_junction is a valid junction represented by a string.
+            - source_junction_id in self.graph.vertices
+            - target_junction_id in self.graph.vertices
+            - source_junction_id != target_junction_id
         """
         for road_id in road_ids:
             self.graph.remove_road(road_id)

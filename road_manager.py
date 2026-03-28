@@ -1,3 +1,4 @@
+from fast_file_loader import FastFileLoader
 from graph import Graph, Road
 from typing import Optional
 
@@ -29,7 +30,7 @@ class RoadManager:
         Initialize RoadManager with the Ontario road network data.
         """
         self.graph = Graph()
-        self.fetch_data_and_build_graph(FileLoader('data/ontario_road_network.geojson.gz'))
+        self.fetch_data_and_build_graph(FastFileLoader('data/ontario_road_network.geojson.gz'))
         # TODO: replace with constant from constants.py
 
     def fetch_data_and_build_graph(self, data_loader: DataLoader) -> None:
@@ -38,11 +39,14 @@ class RoadManager:
 
         There are no preconditions to use this function
         """
+        print('Starting data load')
         result: DataLoadState = data_loader.load()
 
         if not isinstance(result, DataLoadSuccessState):
             print('Failed to load Ontario road network data.')
             return
+
+        print('Data loaded')
 
         data: dict = result.data
         graph: Graph = self.graph
@@ -73,6 +77,8 @@ class RoadManager:
                                removed=False, geometry=geometry[::-1])
             else:
                 print(f'Unknown direction value: {direction} for road {road_id}')
+
+        print('Whole of graph built.')
 
     def remove_road_and_get_path(
             self, road_ids: list[str], source_junction_id: str, target_junction_id: str

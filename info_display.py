@@ -1,17 +1,42 @@
-from typing import Optional
+from dataclasses import dataclass
 
 
 class InfoDisplayState:
-    pass
+    def __init__(self):
+        """
+        This is an abstract class, so raise unimplemented error if someone tried to instantiate this
+        """
+        pass
+        # raise NotImplementedError
 
 
-class InfoDisplayInitState(InfoDisplayState):
-    pass
+class InfoDisplayLoadingState(InfoDisplayState):
+    """
+    Immutable
+    TODO: continue this
+    """
+    # message: str
 
 
-class InfoDisplayRemoveSuccessState(InfoDisplayState):
-    new_length: Optional[float]
+class InfoDisplayDataLoadedState(InfoDisplayState):
+    """
+    TODO: continue this
+    """
+
+
+@dataclass(slots=True, frozen=True)
+class ShortestPathSuccessState(InfoDisplayDataLoadedState):
     prev_length: float
+    new_length: float
+    shortest_paths: list[list[tuple[str, str]]]
+
+
+class JunctionDisconnectedState(InfoDisplayDataLoadedState):
+    pass
+
+
+class InvalidRoadSelectionsState(InfoDisplayDataLoadedState):
+    pass
 
 
 class InfoDisplayErrorState(InfoDisplayState):

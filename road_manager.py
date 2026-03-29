@@ -29,7 +29,7 @@ class RoadManager:
         Initialize RoadManager with the Ontario road network data.
         """
         self.graph = Graph()
-        self.fetch_data_and_build_graph(FastFileLoader('data/ontario_road_network.geojson'))
+        self.fetch_data_and_build_graph(FastFileLoader('ontario_road_network.geojson'))
         # TODO: replace with constant from constants.py
 
     def fetch_data_and_build_graph(self, data_loader: DataLoader) -> None:
@@ -139,6 +139,12 @@ class RoadManager:
         for road_id in road_ids:
             self.graph.remove_road(road_id)
 
+        return self.get_shortest_path(source_junction_id, target_junction_id)
+
+    def get_shortest_path(self, source_junction_id: str, target_junction_id: str) -> Optional[ShortestPathResult]:
+        """
+        TODO: write docstrings
+        """
         return self.graph.compute_shortest_path(source_junction_id, target_junction_id)
 
     def check_removability(self, roads: list[str]) -> tuple[bool, list[str]]:

@@ -9,7 +9,8 @@ from streamlit import cache_data, session_state
 import streamlit as st
 
 from coordinate import Coordinate
-from info_display import InfoDisplayState, InfoDisplayInitState
+from info_display import InfoDisplayDataLoadedState, InfoDisplayState, InfoDisplayLoadingState, \
+    InvalidRoadSelectionsState, JunctionDisconnectedState, ShortestPathSuccessState
 from road_manager import RoadManager
 from ui_road import UIRoad
 
@@ -28,75 +29,95 @@ class StreamlitManager:
     _roads: dict[str, UIRoad]
     _selected_roads: dict[str, Road]
     _road_average_length: float
-    _info_display_state: InfoDisplayState
     _default_session_state_dict: dict[str, Any]
 
     def __init__(self) -> None:
         """
         Initialize StreamlitManager with the Ontario road network data and default display settings.
         """
-        self._default_session_state_dict = {
-            'map_info': {
-                "last_clicked": None,
-                "last_object_clicked": None,
-                "last_object_clicked_tooltip": None,
-                "last_object_clicked_popup": None,
-                "all_drawings": None,
-                "last_active_drawing": None,
-                "bounds": {
-                    "_southWest": {"lat": 43.64638600677007, "lng": -79.42711830139162},
-                    "_northEast": {"lat": 43.68984603369737, "lng": -79.36489105224611}
-                },
-                "zoom": 13,
-                "last_circle_radius": None,
-                "last_circle_polygon": None,
-                "center": {"lat": 43.66638600677007, "lng": -79.49711830139162},
-                "selected_layers": []
+        self._set_info_display_state(InfoDisplayLoadingState())
+
+        with st.spinner('Loading and building graphs. This takes about 6 seconds.'):
+
+            self._default_session_state_dict = {
+                'map_info': {
+                    "last_clicked": None,
+                    "last_object_clicked": None,
+                    "bounds": {
+                        "_southWest": {"lat": 43.64638600677007, "lng": -79.42711830139162},
+                        "_northEast": {"lat": 43.68984603369737, "lng": -79.36489105224611}
+                    },
+                    "zoom": 14,
+                }
             }
-        }
 
-        self._road_manager = RoadManager()
-        self._init_map_related_data()
-        self._info_display_state = InfoDisplayInitState()
+            self._set_info_display_state(InfoDisplayLoadingState())
 
-        total_length: float = 0
-        for key in self._roads:
-            ui_road: UIRoad = self._roads[key]
-            length: float = ui_road.road.length
-            total_length += length
+            self._road_manager = RoadManager()
 
-        if len(self._roads) > 0:
-            self._road_average_length = total_length / len(self._roads)
-        else:
-            self._road_average_length = 0
+            self._set_info_display_state(InfoDisplayLoadingState())
+
+            self._init_map_related_data()
+
+            total_length: float = 0
+            for key in self._roads:
+                ui_road: UIRoad = self._roads[key]
+                length: float = ui_road.road.length
+                total_length += length
+
+            if len(self._roads) > 0:
+                self._road_average_length = total_length / len(self._roads)
+            else:
+                self._road_average_length = 0
 
         # TODO: remove console.log
-        st.html('''<script>
-                    setInterval(() => {
-                        if(window.frames['0'] != undefined && window.frames['0'].map != undefined) {
-                            let mapObject = window.frames['0'].map
-                            let zoom = mapObject.getZoom()
-                            let bounds = mapObject.getBounds()
+        # this script uses set interval to periodically update the query params with latest bounds and zoom.
+        # accessing them directly from st folium (or even trying to get their information by including
+        # them in returned_objects field leads to horrible performance issues, as they force an app
+        # rerun if returned that way a lot of times). We can then extract the current map zoom
+        # and bounds value then from query params, that streamlit allows us to access.
+            st.html('''<script>
+                        setInterval(() => {
+                            if(window.frames['0'] != undefined && window.frames['0'].map != undefined) {
+                                let mapObject = window.frames['0'].map
+                                let zoom = mapObject.getZoom()
+                                let bounds = mapObject.getBounds()
+    
+                                // url setting code seen from https://stackoverflow.com/a/41542008
+                                let modifiedURL = new URL(location.href);
+    
+                                modifiedURL.searchParams.set('zoom', window.frames['0'].map.getZoom());
+    
+                                let northEast = bounds['_northEast']
+                                let southWest = bounds['_southWest']
+                                modifiedURL.searchParams.set('neLat', northEast['lat'],);
+                                modifiedURL.searchParams.set('neLng', northEast['lng'],);
+                                modifiedURL.searchParams.set('swLat', southWest['lat'],);
+                                modifiedURL.searchParams.set('swLng', southWest['lng'],);
+    
+                                history.pushState(null, '', modifiedURL)
+                            }
+                        }, 100)
+                    </script>''',
+                    unsafe_allow_javascript=True  # this just means we trust our js code that we wrote, and are
+                    # not running something untrusted like from API or concatenating some input
+                    )
 
-                            // url setting code seen from https://stackoverflow.com/a/41542008
-                            let modifiedURL = new URL(location.href);
+            self._set_info_display_state(InfoDisplayDataLoadedState())
 
-                            modifiedURL.searchParams.set('zoom', window.frames['0'].map.getZoom());
+    def _get_info_display_state(self) -> InfoDisplayState:
+        """
+        TODO: write docstring
+        Preconditions:
+            - st.session_state.get('info_display_state') is not None
+        """
+        return st.session_state['info_display_state']
 
-                            let northEast = bounds['_northEast']
-                            let southWest = bounds['_southWest']
-                            modifiedURL.searchParams.set('neLat', northEast['lat'],);
-                            modifiedURL.searchParams.set('neLng', northEast['lng'],);
-                            modifiedURL.searchParams.set('swLat', southWest['lat'],);
-                            modifiedURL.searchParams.set('swLng', southWest['lng'],);
-
-                            history.pushState(null, '', modifiedURL)
-                        }
-                    }, 100)
-                </script>''',
-                unsafe_allow_javascript=True  # this just means we trust our js code that we wrote, and are
-                # not running something untrusted like from API or concatenating some input
-                )
+    def _set_info_display_state(self, state: InfoDisplayState) -> None:
+        """
+        TODO write docstring
+        """
+        st.session_state['info_display_state'] = state
 
     def _init_map_related_data(self) -> None:
         """
@@ -105,31 +126,40 @@ class StreamlitManager:
         method as a result *does not* fetch data, but only initializes data related to map
         relevant to a Boundary class such as this (boundary class means that which the user interacts
         with directly). Fetching data is RoadManager class' job.
-        :return:
         """
+        self._roads = {}
+        self._selected_roads = {}
+
         roads: dict[str, Road] = self._road_manager.get_roads()
 
         for road_id in roads:
-            color: str
-            end_four_chars: str = road_id[-4:]  # this is guaranteed to exist, since we always append a four letter
-            # suffix to our road ids when building the graph.
-
-            if end_four_chars == constants.ROAD_POSITIVE_SUFFIX:
-                color = 'blue'
-            elif end_four_chars == constants.ROAD_NEGATIVE_SUFFIX:
-                color = 'black'
-            else:
-                # it is a uni directional road
-                color = 'brown'
-
             self._roads[road_id] = UIRoad(
                 road=roads[road_id],
                 visible=True,  # make every road visible, we will make the ones not in bound or too minor for
                 # current zoom in another method.
-                colour=color
+                colour=self._get_apt_colour_by_road_id(road_id)
             )
 
-        self._selected_roads = {}
+    def _get_apt_colour_by_road_id(self, road_id: str) -> str:
+        """
+        Mutating method
+
+        TODO: write docstring
+        :return:
+        """
+        color: str
+        end_four_chars: str = road_id[-4:]  # this is guaranteed to exist, since we always append a four letter
+        # suffix to our road ids when building the graph.
+
+        if end_four_chars == constants.ROAD_POSITIVE_SUFFIX:
+            color = 'blue'
+        elif end_four_chars == constants.ROAD_NEGATIVE_SUFFIX:
+            color = 'black'
+        else:
+            # it is a uni directional road
+            color = 'brown'
+
+        return color
 
     def _get_road_id_by_selection(self, point: Coordinate) -> Optional[str]:
         """
@@ -153,6 +183,8 @@ class StreamlitManager:
 
             road: Road = ui_road.road
             polyline: list[tuple[float, float]] = road.geometry
+
+            # shapely takes coordinates in latitude, longitude order.
             multiline: MultiLineString = MultiLineString([[(coordinate[1], coordinate[0]) for coordinate in polyline]])
 
             distance_from_clicked_coordinate: float = point_shape.distance(multiline)
@@ -200,9 +232,13 @@ class StreamlitManager:
             road: Road = ui_road.road
             length: float = road.length
 
+            is_in_shortest_path: bool = ui_road.colour == constants.SHORTEST_PATH_ROAD_COLOUR
+
             # ignore how big or small a road is if the user is zoomed in enough, and thus show all roads
-            # that pass the bounds check
-            length_check_passed: bool = zoom_level >= constants.BIG_ENOUGH_ZOOM_THRESHOLD or length >= length_bound
+            # that pass the bounds check. Similarly, ignore
+            length_check_passed: bool = (zoom_level >= constants.BIG_ENOUGH_ZOOM_THRESHOLD
+                                         or length >= length_bound
+                                         or is_in_shortest_path)
             bounds_check_passed: bool = False
 
             if length_check_passed:
@@ -246,8 +282,8 @@ class StreamlitManager:
                              polyline_coordinate_latitude + signed_delta * -1)
                         )
 
-                    if (min_latitude <= polyline_coordinate_latitude <= max_latitude and
-                            min_longitude <= polyline_coordinate_longitude <= max_longitude):
+                    if is_in_shortest_path or (min_latitude <= polyline_coordinate_latitude <= max_latitude and
+                        min_longitude <= polyline_coordinate_longitude <= max_longitude):
                         bounds_check_passed = True
                         # don't break, as we are also translating polylines
 
@@ -266,11 +302,11 @@ class StreamlitManager:
         rebuilding the roads, and restoring the default display settings.
 
         Preconditions:
-            - self._roads and self._selected_roads are initialized
+            - self._roads is initialized
         """
         self._init_map_related_data()
 
-        self._info_display_state = InfoDisplayInitState()
+        self._set_info_display_state(InfoDisplayDataLoadedState())
         self._road_manager.restore_removed_roads()
 
     def _update_state(self, key: str, value: Any) -> None:
@@ -310,51 +346,75 @@ class StreamlitManager:
         if last_clicked_object is None:
             return
         else:
-            selected_road_id: Optional[str] = (
-                self._get_road_id_by_selection(Coordinate(last_clicked_object['lat'], last_clicked_object['lng'])))
+            selected_road_id: Optional[str] = self._get_road_id_by_selection(
+                Coordinate(last_clicked_object['lat'], last_clicked_object['lng'])
+            )
 
             print(f'Road selected is: {selected_road_id}')
             if selected_road_id is not None:
                 selected_road = self._roads[selected_road_id]
-                selected_road.colour = '#FF0000'
+                selected_road.colour = constants.SELECTED_ROAD_COLOUR
                 road: Road = selected_road.road
                 self._selected_roads[selected_road_id] = road
-        # zoom: int = state_map_info['zoom']
-        #
-        # state_map_info_bounds: dict = state_map_info['bounds']
-        #
-        # north_east_bounds: dict = state_map_info_bounds['_northEast']
-        # south_west_bounds: dict = state_map_info_bounds['_southWest']
-        # bounds: tuple[Coordinate, Coordinate] = (
-        #     Coordinate(north_east_bounds['lat'], north_east_bounds['lng']),
-        #     Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
-        # )
 
     def _handle_compute_shortest_path(self) -> None:
+        info_display_state: InfoDisplayState = self._get_info_display_state()
+
+        if isinstance(info_display_state, ShortestPathSuccessState):
+            shortest_paths: list[list[tuple[str, str]]] = info_display_state.shortest_paths
+            for path in shortest_paths:
+                path_end_index: int = len(path) - 1
+                for index in range(0, path_end_index):
+                    road_id: str = path[index][1]
+                    self._roads[road_id].colour = self._get_apt_colour_by_road_id(road_id)
+
+        self._set_info_display_state(InfoDisplayLoadingState())
+
         road_manager: RoadManager = self._road_manager
         road_ids: list[str] = list(self._selected_roads.keys())
         removability_test_result: tuple[bool, list[str]] = road_manager.check_removability(road_ids)
+
         if removability_test_result[0]:
-            source_and_end: list[str] = removability_test_result[1]
-            shortest_distance_result: Optional[ShortestPathResult] = road_manager.remove_road_and_get_path(
-                road_ids=road_ids,
-                source_junction_id=source_and_end[0],
-                target_junction_id=source_and_end[1])
-            if shortest_distance_result is None:
-                print('Path is disconnected')
+            source_and_end: list[str] = removability_test_result[1]  # TODO: change to tuple
+            source: str = source_and_end[0]
+            target: str = source_and_end[1]
+
+            prev_shortest_distance: Optional[ShortestPathResult] = road_manager.get_shortest_path(
+                source_junction_id=source,
+                target_junction_id=target
+            )
+
+            if prev_shortest_distance is None:
+                print('Road segments were already disconnected, this should not have passed the '
+                      'removability test. Still we will handle it gracefully instead of '
+                      'throwing an error.')
+                self._set_info_display_state(JunctionDisconnectedState())
             else:
-                print(f'Length of shortest path now {shortest_distance_result.length}')
+                shortest_distance_result: Optional[ShortestPathResult] = road_manager.remove_road_and_get_path(
+                    road_ids=road_ids,
+                    source_junction_id=source,
+                    target_junction_id=target)
+
+                if shortest_distance_result is None:
+                    self._set_info_display_state(JunctionDisconnectedState())
+
+                all_shortest_paths:  list[list[tuple[str, str]]] = shortest_distance_result.all_shortest_paths
                 for shortest_path in shortest_distance_result.all_shortest_paths:
-                    print(shortest_path)
+
                     vertices_end_index: int = len(shortest_path) - 1
                     for index in range(0, vertices_end_index):
                         vertex: tuple[str, str] = shortest_path[index]
                         road: UIRoad = self._roads[vertex[1]]
                         road.visible = True
-                        road.colour = 'green'
+                        road.colour = constants.SHORTEST_PATH_ROAD_COLOUR
 
+                self._set_info_display_state(ShortestPathSuccessState(
+                    prev_length=prev_shortest_distance.length,
+                    new_length=shortest_distance_result.length,
+                    shortest_paths=all_shortest_paths
+                ))
         else:
-            print('CANNOT PERFORM MODIFIED DIJKTRAS')
+            self._set_info_display_state(InvalidRoadSelectionsState())
 
     def display(self) -> None:
         """
@@ -362,135 +422,173 @@ class StreamlitManager:
         that gets rerun as streamlit runs the app from top down on any update.
         """
         print('\nDisplayin')
-        state_map_info: dict = self._get_state_value_by_key('map_info')
+        info_display_state: InfoDisplayState = st.session_state['info_display_state']
 
-        query_params = st.query_params
+        if isinstance(info_display_state, InfoDisplayLoadingState):
+            # this is done to protect against data being accidently displayed while it is still being loaded,
+            # in which case there are chances of error
+            return
+        elif isinstance(info_display_state, InfoDisplayDataLoadedState):
 
-        current_zoom_from_map: str = query_params.get('zoom')
+            with st.spinner('Building Map'):
 
-        zoom: int
-        state_map_info_bounds: dict
+                query_params = st.query_params
 
-        if current_zoom_from_map is not None:
-            zoom = int(current_zoom_from_map)
-            # 'neLat' and other query params are
-            # guaranteed not to be null, as zoom and these values are set together, unless something
-            # terribly goes wrong in which case it is a situation of data corruption in general.
-            state_map_info_bounds = {
-                '_northEast': {
-                    'lat': float(query_params.get('neLat')),
-                    'lng': float(query_params.get('neLng'))
-                },
-                '_southWest': {
-                    'lat': float(query_params.get('swLat')),
-                    'lng': float(query_params.get('swLng'))
-                }
-            }
-        else:
-            zoom = self._default_session_state_dict['map_info']['zoom']
-            state_map_info_bounds = state_map_info['bounds']
+                current_zoom_from_map: str = query_params.get('zoom')
 
-        north_east_bounds: dict = state_map_info_bounds['_northEast']
-        south_west_bounds: dict = state_map_info_bounds['_southWest']
-        bounds: tuple[Coordinate, Coordinate] = (
-            Coordinate(north_east_bounds['lat'], north_east_bounds['lng']),
-            Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
-        )
+                zoom: int
+                state_map_info_bounds: dict
 
-        north_east_bounds_tuple: tuple[float, float] = (
-            north_east_bounds['lat'], north_east_bounds['lng']
-        )
-        # University of Toronto area location coordinates
-        # location needs latitude and longitude coordinates, opposite to our project order,
-        # but since this is just one statement, switching is easy, and hence the order in
-        # north_east_bounds_tuple
-        folium_map: folium.Map = folium.Map(location=(
-            south_west_bounds['lat'] + ((north_east_bounds['lat'] - south_west_bounds['lat']) / 2),
-            south_west_bounds['lng'] + ((north_east_bounds['lng'] - south_west_bounds['lng']) / 2)
-        ), zoom_start=zoom, max_zoom=19, min_zoom=1)
-        self._update_visible_roads_by_bounds(zoom_level=zoom, bounds=bounds)
-
-        roads: dict[str, UIRoad] = self._roads
-        # code adapted from https://python-visualization.github.io/folium/latest/user_guide/geojson/geojson.html
-        geojson_data: dict = {
-            'type': 'FeatureCollection',
-            'features': [
-                {
-                    'type': 'Feature',
-                    'properties': {
-                        'color': roads[road_id].visible,
-                        'road_id': road_id,
-                        'length': f'{roads[road_id].road.length // 1.0}',  # floored division
-                        # to get rid of decimals, which lead to trivially longer paths (like by 0.1 meters)
-                        # to not be recognized as the shortest path. Since that's how we run our shortest path
-                        # algorithm by ignoring decimals to address these trivially longer paths, we will
-                        # display to the user distance without decimals also. Stripping of decimals is
-                        # faster here than while loading all data, since it is only for a small subset of
-                        # all roads. Also, no length would become 0, since our biggest length of road is
-                        # at least 1 meter.
-                    },
-                    'geometry': {
-                        'type': 'MultiLineString',
-                        'coordinates': [[
-                            (coordinate[1], coordinate[0])
-                            for coordinate in roads[road_id].road.geometry
-                        ]]
+                if current_zoom_from_map is not None:
+                    zoom = int(current_zoom_from_map)
+                    # 'neLat' and other query params are
+                    # guaranteed not to be null, as zoom and these values are set together, unless something
+                    # terribly goes wrong in which case it is a situation of data corruption in general.
+                    state_map_info_bounds = {
+                        '_northEast': {
+                            'lat': float(query_params.get('neLat')),
+                            'lng': float(query_params.get('neLng'))
+                        },
+                        '_southWest': {
+                            'lat': float(query_params.get('swLat')),
+                            'lng': float(query_params.get('swLng'))
+                        }
                     }
+                else:
+                    zoom = self._default_session_state_dict['map_info']['zoom']
+                    state_map_info_bounds = self._default_session_state_dict['map_info']['bounds']
+
+                north_east_bounds: dict = state_map_info_bounds['_northEast']
+                south_west_bounds: dict = state_map_info_bounds['_southWest']
+                bounds: tuple[Coordinate, Coordinate] = (
+                    Coordinate(north_east_bounds['lat'], north_east_bounds['lng']),
+                    Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
+                )
+
+                north_east_bounds_tuple: tuple[float, float] = (
+                    north_east_bounds['lat'], north_east_bounds['lng']
+                )
+                # University of Toronto area location coordinates
+                # location needs latitude and longitude coordinates, opposite to our project order,
+                # but since this is just one statement, switching is easy, and hence the order in
+                # north_east_bounds_tuple
+                folium_map: folium.Map = folium.Map(location=(
+                    south_west_bounds['lat'] + ((north_east_bounds['lat'] - south_west_bounds['lat']) / 2),
+                    south_west_bounds['lng'] + ((north_east_bounds['lng'] - south_west_bounds['lng']) / 2)
+                ), zoom_start=zoom, max_zoom=19, min_zoom=1)
+
+                self._update_visible_roads_by_bounds(zoom_level=zoom, bounds=bounds)
+
+                roads: dict[str, UIRoad] = self._roads
+
+                # code adapted from
+                # https://python-visualization.github.io/folium/latest/user_guide/geojson/geojson.html
+                geojson_data: dict = {
+                    'type': 'FeatureCollection',
+                    'features': [
+                        {
+                            'type': 'Feature',
+                            'properties': {
+                                'color': roads[road_id].colour,
+                                'road_id': road_id,
+                                'length': f'{roads[road_id].road.length // 1.0} Meters',  # floored division
+                                # to get rid of decimals, which lead to trivially longer paths (like by 0.1 meters)
+                                # to not be recognized as the shortest path. Since that's
+                                # how we run our shortest path algorithm by ignoring decimals to address
+                                # these trivially longer paths, we will
+                                # display to the user distance without decimals also. Stripping of decimals is
+                                # faster here than while loading all data, since it is only for a small subset of
+                                # all roads. Also, no length would become 0, since our biggest length of road is
+                                # at least 1 meter.
+                            },
+                            'geometry': {
+                                'type': 'MultiLineString',
+                                'coordinates': [roads[road_id].road.geometry]
+                            }
+                        }
+                        for road_id in roads
+                        if roads[road_id].visible
+                    ]
                 }
-                for road_id in roads
-            ]
-        }
 
-        folium.GeoJson(
-            geojson_data,
-            style_function=lambda feature: {
-                'color': feature['properties']['color']
-            },
-            tooltip=folium.GeoJsonTooltip(
-                fields=['road_id', 'length']
-            )
-        ).add_to(folium_map)
+                folium.GeoJson(
+                    geojson_data,
+                    style_function=lambda feature: {
+                        'color': feature['properties']['color'],
+                    },
+                    tooltip=folium.GeoJsonTooltip(
+                        fields=['road_id', 'length'],
+                        aliases=['Road ID', 'Length']
+                    )
+                ).add_to(folium_map)
 
-        # geojson_data = {
-        #     "type": "FeatureCollection",
-        #     "features": [
-        #         {
-        #             "type": "Feature",
-        #             "geometry": {
-        #                 "type": "LineString",
-        #                 "coordinates": [[lat, lon] for lat, lon in self._roads[road_id].road.geometry]
-        #             },
-        #             "properties": {
-        #                 "color": self._roads[road_id].colour,
-        #                 "road_id": road_id,
-        #                 "length": self._roads[road_id].road.length // 1.0
-        #             }
-        #         }
-        #         for road_id in self._roads
-        #         if self._roads[road_id].visible
-        #     ]
-        # }
-        #
-        # folium.GeoJson(geojson_data,
-        #                style_function=lambda f: {
-        #                     "color": f["properties"]["color"],
-        #                 },
-        #                tooltip=folium.GeoJsonTooltip(
-        #                    fields=["road_id", "length"],
-        #                 )).add_to(folium_map)
+                # geojson_data = {
+                #     "type": "FeatureCollection",
+                #     "features": [
+                #         {
+                #             "type": "Feature",
+                #             "geometry": {
+                #                 "type": "LineString",
+                #                 "coordinates": [[lat, lon] for lat, lon in self._roads[road_id].road.geometry]
+                #             },
+                #             "properties": {
+                #                 "color": self._roads[road_id].colour,
+                #                 "road_id": road_id,
+                #                 "length": self._roads[road_id].road.length // 1.0
+                #             }
+                #         }
+                #         for road_id in self._roads
+                #         if self._roads[road_id].visible
+                #     ]
+                # }
+                #
+                # folium.GeoJson(geojson_data,
+                #                style_function=lambda f: {
+                #                     "color": f["properties"]["color"],
+                #                 },
+                #                tooltip=folium.GeoJsonTooltip(
+                #                    fields=["road_id", "length"],
+                #                 )).add_to(folium_map)
 
-        with st.columns(2):
-            streamlit_folium.st_folium(
-                fig=folium_map,
-                key='map_info',
-                zoom=zoom,
-                on_change=self._handle_map_events,
-                returned_objects=['last_object_clicked']
-            )
+                # code adapted from https://docs.streamlit.io/develop/api-reference/layout/st.columns
+                columns: list = st.columns(2)
 
-            st.button('Reload Polylines', on_click=lambda: print('clicked'))
-            st.button('Compute shortest path', on_click=self._handle_compute_shortest_path)
-            st.button('Redo', on_click=self.reset)
+                with columns[0]:
+                    streamlit_folium.st_folium(
+                        fig=folium_map,
+                        key='map_info',
+                        zoom=zoom,
+                        on_change=self._handle_map_events,
+                        returned_objects=['last_object_clicked'],
+                    )
+
+                with columns[1]:
+                    st.text(f'Roads Currently Selected: {len(self._selected_roads)}')
+                    st.button('Reload Polylines', on_click=lambda: print('clicked'))
+                    st.button('Compute Shortest Path', on_click=self._handle_compute_shortest_path)
+                    st.button('Reset', on_click=self.reset)
+
+                    print(type(info_display_state))
+                    if isinstance(info_display_state, ShortestPathSuccessState):
+                        st.text('Shortest paths computed successfully.')
+                        st.text(f'There are in total {len(info_display_state.shortest_paths)} shortest path(s).')
+                        st.text('Previous length of shortest path before removal of road segment was '
+                                f'{info_display_state.prev_length} meters.')
+                        st.text(f'Now, after removal, the length of shortest path '
+                                f'is  {info_display_state.new_length} meters.')
+
+                    elif isinstance(info_display_state, JunctionDisconnectedState):
+                        st.text('The removal of your selected road segments will cause the junction to '
+                                'be disconnected')
+                        st.text('Therefore, there will be no shortest path if the selected segments are closed.')
+                    elif isinstance(info_display_state, InvalidRoadSelectionsState):
+                        st.text('Your selection of road segments is invalid.')
+                        st.text('The selected road segments considered together should have only one free start '
+                                'point and only one free end point, regardless of how many of them are selected. '
+                                'By free start/end point, it means that the start/end point is not the '
+                                'end/start point of some other road respectively. You may want to press '
+                                'reset and try again.'
+                                )
 
 
 if __name__ == '__main__':

@@ -88,7 +88,7 @@ Types of computations to perform on the data:
 
 1. Display a graph representation of road network on Ontario map.
 
-2. Make a road segment removable by clicking on it, using a modified version of Dijkstra's algorithm to compute all shortest paths of equal minimum length between point A and point B that the removed road segment used to connect previously. Dijkstra's algorithm is used to give the shortest path from one
+2. Make road segments removable by clicking on them, using a modified version of Dijkstra's algorithm to compute all shortest paths of equal minimum length between point A and point B that the removed road segments used to connect previously. Dijkstra's algorithm is used to give the shortest path from one
 source vertex to all other ones, and it has a time complexity of $\Theta((V+E)LogV)$ where $E$ is the number of edges (roads) and $V$ is the number of vertices (intersections/road start/end point), so it is best suited to solve the problem efficiently for this data (GeeksforGeeks).
 
 3. Using the same algorithm as above, build a collection of shortest paths from the graph and highlight these shortest paths on the map. In case of a tie, all shortest paths of equal length are shown. Show this shortest path on the map in a distinct color. If no path exists, the program displays a message indicating those two nodes are now disconnected.
@@ -99,7 +99,7 @@ The following Python libraries are used in this project to accomplish its tasks.
 
 A modified version of Dijkstra's algorithm is implemented in \texttt{Graph.compute\_shortest\_path} in \texttt{graph.py}. Unlike the standard algorithm which returns only one shortest path, this version collects all shortest paths of equal minimum length. The result is returned as a \texttt{ShortestPathResult} dataclass containing the shortest length and all equal shortest paths. If no path exists between the two nodes, \texttt{None} is returned to indicate disconnection. \\
 
-Apart from the shortest path algorithm, the program performs additional computations on the data. To avoid performance issues from rendering over one million road segments at once, \texttt{StreamlitManager.\_update\_visible\_roads\_by\_bounds} in \texttt{streamlit\_manager.py} filters roads based on two criteria: whether any coordinate of the road falls within the current map bounds, and whether the road length exceeds a threshold computed from the current zoom level. At zoom levels below 13, only longer roads are shown. At zoom level 13 and above, all roads within bounds are rendered. The average road length, stored as \texttt{\_road\_average\_length}, is computed during initialization and used as part of this threshold calculation.
+Apart from the shortest path algorithm, the program performs additional computations on the data. To avoid performance issues from rendering over one million road segments at once, \texttt{StreamlitManager.\_update\_visible\_roads\_by\_bounds} in \texttt{streamlit\_manager.py} filters roads based on the two criteria described in bullet point 4 above. The average road length, stored as \texttt{\_road\_average\_length}, is computed during initialization and used as part of this threshold calculation.
 
 \section*{Instructions for Running the Program}
 

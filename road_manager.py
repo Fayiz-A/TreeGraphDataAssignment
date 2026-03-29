@@ -114,6 +114,15 @@ class RoadManager:
         print(f'The whole fetch_data_and_build_graph method took {time.perf_counter() - start_time_all}')
         print(f'The geometry loop took {time_delta_5} seconds, and we had {coordinates_length} coordinates in total')
 
+    def restore_removed_roads(self) -> None:
+        """
+        Restore all roads which were soft deleted.
+
+        Preconditions:
+            - self.graph has been initialized
+        """
+        self.graph.restore_removed_roads()
+
     def remove_road_and_get_path(
             self, road_ids: list[str], source_junction_id: str, target_junction_id: str
     ) -> Optional[ShortestPathResult]:
@@ -133,4 +142,16 @@ class RoadManager:
         return self.graph.compute_shortest_path(source_junction_id, target_junction_id)
 
     def check_removability(self, roads: list[str]) -> tuple[bool, list[str]]:
+        """
+        TODO: complete docstring
+        """
         return self.graph.is_valid_road_selection(roads)
+
+    def get_roads(self) -> dict[str, Road]:
+        """
+        Return self.graph's roads.
+
+        Preconditions:
+            - self.graph has been initialized
+        """
+        return self.graph.roads

@@ -2,12 +2,10 @@
 TODO: add docstring
 """
 import doctest
-import pprint
 from collections.abc import dict_values
-from copy import deepcopy
 from typing import Any, Optional
 
-from streamlit import cache_data, cache_resource, session_state
+from streamlit import cache_data, session_state
 import streamlit as st
 
 from coordinate import Coordinate
@@ -58,10 +56,7 @@ class StreamlitManager:
         }
 
         self._road_manager = RoadManager()
-        self._roads = {
-            road_id: UIRoad(road=road, visible=True, colour=f'{'brown' if road_id[-4:] == '_one' else ('blue' if road_id[-4:] == '_pos' else 'black')}')
-            for road_id, road in self._road_manager.graph.roads.items()}
-        self._selected_roads = {}
+        self._init_map_related_data()
         self._info_display_state = InfoDisplayInitState()
 
         total_length: float = 0
@@ -103,20 +98,50 @@ class StreamlitManager:
                 # not running something untrusted like from API or concatenating some input
                 )
 
-    def _handle_road_removal(self) -> None:
-        pass
+    def _init_map_related_data(self) -> None:
+        """
+        TODO: add docstring.
+        To clear any misconceptions, as we are using separation of concerns architecture, this
+        method as a result *does not* fetch data, but only initializes data related to map
+        relevant to a Boundary class such as this (boundary class means that which the user interacts
+        with directly). Fetching data is RoadManager class' job.
+        :return:
+        """
+        roads: dict[str, Road] = self._road_manager.get_roads()
 
-    def _get_road_id_by_selection(self, point: Coordinate) -> str | None:
+        for road_id in roads:
+            color: str
+            end_four_chars: str = road_id[-4:]  # this is guaranteed to exist, since we always append a four letter
+            # suffix to our road ids when building the graph.
+
+            if end_four_chars == constants.ROAD_POSITIVE_SUFFIX:
+                color = 'blue'
+            elif end_four_chars == constants.ROAD_NEGATIVE_SUFFIX:
+                color = 'black'
+            else:
+                # it is a uni directional road
+                color = 'brown'
+
+            self._roads[road_id] = UIRoad(
+                road=roads[road_id],
+                visible=True,  # make every road visible, we will make the ones not in bound or too minor for
+                # current zoom in another method.
+                colour=color
+            )
+
+        self._selected_roads = {}
+
+    def _get_road_id_by_selection(self, point: Coordinate) -> Optional[str]:
         """
         Return the UIRoad whose geometric polyline is within a threshold distance
         from the given point, or None if no visible road is close enough.
 
         Preconditions:
-            - isinstance(point, Coordinate)
+            -
         """
         point_shape: Point = Point(point.latitude, point.longitude)
 
-        infinity: int = 1_000_000_000  # of course if we came here
+        infinity: int = constants.INFINITY  # of course if we came here
         # because something was clicked, the click distance will be less
         # than 1 billion units.
         min_distance: float = infinity
@@ -141,7 +166,6 @@ class StreamlitManager:
             # thus, we just return None, as if no road was selected.
             return None
         else:
-            print(f'distance from click: {min_distance}')
             return min_road_id
 
     @cache_data
@@ -225,7 +249,7 @@ class StreamlitManager:
                     if (min_latitude <= polyline_coordinate_latitude <= max_latitude and
                             min_longitude <= polyline_coordinate_longitude <= max_longitude):
                         bounds_check_passed = True
-                        # break
+                        # don't break, as we are also translating polylines
 
                 if translation_factor != 0:
                     road.geometry = polyline_copy
@@ -244,18 +268,10 @@ class StreamlitManager:
         Preconditions:
             - self._roads and self._selected_roads are initialized
         """
-        self._selected_roads.clear()
-
-        self._roads = {road_id: UIRoad(road=road, visible=True, colour='blue')
-                       for road_id, road in self._road_manager.graph.roads.items()}
+        self._init_map_related_data()
 
         self._info_display_state = InfoDisplayInitState()
-
-        self._update_visible_roads_by_bounds(
-            zoom_level=14,
-            bounds=(Coordinate(43.68984603369737, -79.36489105224611),
-                    Coordinate(43.64638600677007, -79.42711830139162))
-        )
+        self._road_manager.restore_removed_roads()
 
     def _update_state(self, key: str, value: Any) -> None:
         """
@@ -282,54 +298,6 @@ class StreamlitManager:
         else:
             print('Returning current value')
             return current_value_in_state
-
-    def _build_folium_map(self, north_east_bounds: Coordinate, zoom: int) -> folium.Map:
-        """
-        explain why _self not self; and why bounds and zoom not used
-        TODO: write docstring
-        """
-        print('Building folium map')
-
-        north_east_bounds_tuple: tuple[float, float] = (
-            north_east_bounds.latitude, north_east_bounds.longitude
-        )
-        # University of Toronto area location coordinates
-        # location needs latitude and longitude coordinates, opposite from our project order,
-        # but since this is just one statement, switching is easy, and hence the order in
-        # north_east_bounds_tuple
-        folium_map: folium.Map = folium.Map(location=north_east_bounds_tuple, zoom_start=zoom)
-
-        return folium_map
-
-    @cache_resource
-    def add_polylines(_self, bounds: tuple[Coordinate, Coordinate], zoom: int) -> folium.FeatureGroup:
-        print(f'Adding polylines as per {bounds}')
-
-        feature_group: folium.FeatureGroup = folium.FeatureGroup(name='polylines')
-
-        length: int = 0
-
-        roads: dict[str, UIRoad] = _self._roads
-        for road_id in roads:
-            road: UIRoad = roads[road_id]
-
-            if road.visible:
-                length += 1
-                road_data: Road = road.road
-                polyline: list[tuple[float, float]] = road_data.geometry
-
-                # reversing coordinates here is faster than for our entire dataset, as it is a lot bigger
-                # than the present visible ones.
-                feature_group.add_child(
-                    folium.PolyLine(
-                        locations=[(coordinate[1], coordinate[0]) for coordinate in polyline],
-                        tooltip=f'Road id {road_id}; length: {road_data.length} meters',
-                        color=road.colour
-                    )
-                )
-
-        print(f'Currently visible polylines: {length}')
-        return feature_group
 
     def _handle_map_events(self) -> None:
         """
@@ -362,7 +330,7 @@ class StreamlitManager:
         #     Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
         # )
 
-    def _handle_button_press(self) -> None:
+    def _handle_compute_shortest_path(self) -> None:
         road_manager: RoadManager = self._road_manager
         road_ids: list[str] = list(self._selected_roads.keys())
         removability_test_result: tuple[bool, list[str]] = road_manager.check_removability(road_ids)
@@ -433,7 +401,7 @@ class StreamlitManager:
             north_east_bounds['lat'], north_east_bounds['lng']
         )
         # University of Toronto area location coordinates
-        # location needs latitude and longitude coordinates, opposite from our project order,
+        # location needs latitude and longitude coordinates, opposite to our project order,
         # but since this is just one statement, switching is easy, and hence the order in
         # north_east_bounds_tuple
         folium_map: folium.Map = folium.Map(location=(
@@ -441,48 +409,88 @@ class StreamlitManager:
             south_west_bounds['lng'] + ((north_east_bounds['lng'] - south_west_bounds['lng']) / 2)
         ), zoom_start=zoom, max_zoom=19, min_zoom=1)
         self._update_visible_roads_by_bounds(zoom_level=zoom, bounds=bounds)
-        # feature_group_polylines: folium.FeatureGroup = self.add_polylines(bounds=bounds, zoom=zoom)
-        # feature_group_polylines.add_to(folium_map)
 
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": [
+        roads: dict[str, UIRoad] = self._roads
+        # code adapted from https://python-visualization.github.io/folium/latest/user_guide/geojson/geojson.html
+        geojson_data: dict = {
+            'type': 'FeatureCollection',
+            'features': [
                 {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": [[lat, lon] for lat, lon in self._roads[road_id].road.geometry]
+                    'type': 'Feature',
+                    'properties': {
+                        'color': roads[road_id].visible,
+                        'road_id': road_id,
+                        'length': f'{roads[road_id].road.length // 1.0}',  # floored division
+                        # to get rid of decimals, which lead to trivially longer paths (like by 0.1 meters)
+                        # to not be recognized as the shortest path. Since that's how we run our shortest path
+                        # algorithm by ignoring decimals to address these trivially longer paths, we will
+                        # display to the user distance without decimals also. Stripping of decimals is
+                        # faster here than while loading all data, since it is only for a small subset of
+                        # all roads. Also, no length would become 0, since our biggest length of road is
+                        # at least 1 meter.
                     },
-                    "properties": {
-                        "color": self._roads[road_id].colour,
-                        "road_id": road_id,
-                        "length": self._roads[road_id].road.length // 1.0
+                    'geometry': {
+                        'type': 'MultiLineString',
+                        'coordinates': [[
+                            (coordinate[1], coordinate[0])
+                            for coordinate in roads[road_id].road.geometry
+                        ]]
                     }
                 }
-                for road_id in self._roads
-                if self._roads[road_id].visible
+                for road_id in roads
             ]
         }
 
-        folium.GeoJson(geojson_data,
-                       style_function=lambda f: {
-                            "color": f["properties"]["color"],
-                        },
-                       tooltip=folium.GeoJsonTooltip(
-                           fields=["road_id", "length"],
-                        )).add_to(folium_map)
+        folium.GeoJson(
+            geojson_data,
+            style_function=lambda feature: {
+                'color': feature['properties']['color']
+            },
+            tooltip=folium.GeoJsonTooltip(
+                fields=['road_id', 'length']
+            )
+        ).add_to(folium_map)
 
-        streamlit_folium.st_folium(
-            fig=folium_map,
-            # feature_group_to_add=feature_group_polylines,
-            key='map_info',
-            zoom=zoom,
-            on_change=self._handle_map_events,
-            returned_objects=['last_object_clicked']
-        )
+        # geojson_data = {
+        #     "type": "FeatureCollection",
+        #     "features": [
+        #         {
+        #             "type": "Feature",
+        #             "geometry": {
+        #                 "type": "LineString",
+        #                 "coordinates": [[lat, lon] for lat, lon in self._roads[road_id].road.geometry]
+        #             },
+        #             "properties": {
+        #                 "color": self._roads[road_id].colour,
+        #                 "road_id": road_id,
+        #                 "length": self._roads[road_id].road.length // 1.0
+        #             }
+        #         }
+        #         for road_id in self._roads
+        #         if self._roads[road_id].visible
+        #     ]
+        # }
+        #
+        # folium.GeoJson(geojson_data,
+        #                style_function=lambda f: {
+        #                     "color": f["properties"]["color"],
+        #                 },
+        #                tooltip=folium.GeoJsonTooltip(
+        #                    fields=["road_id", "length"],
+        #                 )).add_to(folium_map)
 
-        st.button('Reload Polylines', on_click=lambda: print('clicked'))
-        st.button('Compute shortest path', on_click=self._handle_button_press)
+        with st.columns(2):
+            streamlit_folium.st_folium(
+                fig=folium_map,
+                key='map_info',
+                zoom=zoom,
+                on_change=self._handle_map_events,
+                returned_objects=['last_object_clicked']
+            )
+
+            st.button('Reload Polylines', on_click=lambda: print('clicked'))
+            st.button('Compute shortest path', on_click=self._handle_compute_shortest_path)
+            st.button('Redo', on_click=self.reset)
 
 
 if __name__ == '__main__':

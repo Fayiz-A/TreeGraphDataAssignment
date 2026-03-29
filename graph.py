@@ -495,6 +495,17 @@ class Graph:
             # to_vertex.neighbours.remove(road)
             # self.roads.pop(road_id)
 
+    def restore_removed_roads(self) -> None:
+        """
+        Restore all roads which were soft deleted.
+
+        Preconditions:
+            - self.roads has been initialized
+        """
+        roads: dict[str, Road] = self.roads
+        for road_id in roads:
+            roads[road_id].removed = False
+
     def add_road(self, from_junction_id: str, to_junction_id: str, length: float, road_id: str,
                  removed: bool, geometry: list[tuple[float, float]]) -> None:
         """

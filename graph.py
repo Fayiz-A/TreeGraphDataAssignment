@@ -5,15 +5,13 @@ finding Dijktras algorithm code.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import doctest
 from heapq import heapify, heappop, heappush
+from math import ceil
 from typing import Optional
 
-import python_ta
 from python_ta.contracts import check_contracts
-
-from dataclasses import dataclass
-from coordinate import Coordinate
 from path_tree import PathTree
 
 
@@ -34,9 +32,10 @@ class ShortestPathResult:
         - all_shortest_paths: a collection of all shortest
         paths from source vertex to target vertex which have
         are self.length meters long. A shortest path here is a list
-        of tuple, with first element of all tuples being a vertex id,
-        the second element of all tuples (expect last one, which is just going to be an emtpy string) is the road id
-        that the next vertex (next tuple's first argument) is connected to.
+        of tuple, with first element of all tuples being a vertex id, while
+        the second element of all tuples (except last one, which is just going to be an emtpy string)
+        being the road id of Road that the next vertex (next tuple's first argument) is
+        connected to using from current vertex.
 
 
     Representation Invariants:
@@ -173,16 +172,6 @@ class Road:
     removed: bool
     geometry: list[tuple[float, float]]
 
-    def get_geometry_coordinates_tuple(self) -> list[tuple[float, float]]:
-        """
-        Return the geometry Coordinate elements as tuple with the first element of tuple
-        being latitude and second being longitude
-
-        There are no preconditions to use this method.
-        """
-        return []
-        # return [(coordinate.latitude, coordinate.longitude) for coordinate in self.geometry]
-
 
 @dataclass(slots=True)
 class _Vertex:
@@ -223,14 +212,31 @@ class Graph:
         self.roads = {}
 
     @check_contracts
-    def compute_shortest_path(self, source_junction_id: str, target_junction_id: str) -> Optional[ShortestPathResult]:
+    def compute_shortest_path(
+            self, source_junction_id: str, target_junction_id: str
+    ) -> Optional[ShortestPathResult]:
         """
         Compute and return the shortest path between source junction id and target junction id and its length in
-        metres. In case multiple shortest paths of same length exist, return one of them along with its length.
-        In case the two vertices are disconnected, a tuple with empty list and length -1 is returned.
+        metres. In case multiple shortest paths of same length exist, return all of them.
+        In case the two vertices are disconnected, None is returned.
 
-        This method uses Dijktras algorithm.
+        A note on tolerance and shortest path:
+        Shortest path is any path with the shortest possible length from source_junction_id to
+        target_junction_id, but if tolerance (which is in meters units) > 0, then any path with length
+        within [shortest_possible_length, shortest_possible_length + tolerance] range is considered a
+        shortest path. This is useful when an extra distance added till tolerance is considered trivial.
+        For instance, going 1 extra km for a car is  not that much, and hence in this scenario, one
+        can set tolerance = 1000, and then assuming shortest path are two different paths of
+        lengths 500m each, then those two paths and all paths within range [500, 1500] would be
+        considered as just another shortest path and returned as well.
+
+        This method uses a modified version of Dijktras algorithm to make it work for
+        multiple shortest paths to target and to accommadate tolerance value.
         TODO: Continue this.
+
+        Breaking up a doctest result which is too big for one line inspired by https://stackoverflow.com/a/13395612
+        NOTE: Pycharm might highlight item loop variable in doctest as an unresolved reference, this is a false
+        positive by Pycharm. So ignore it, and the doctest works fine.
 
         Preconditions:
             - source_junction_id in self.vertices and target_junction_id in self.vertices
@@ -250,7 +256,9 @@ class Graph:
         >>> shortest_path_result: ShortestPathResult = graph.compute_shortest_path('A', 'E')
         >>> sorted(shortest_path_result.all_shortest_paths, key=lambda shortest_path:
         ... ''.join([item[0] for item in shortest_path]))
-        [[('A', 'A->B'), ('B', 'B->C'), ('C', 'C->E'), ('E', '')], [('A', 'A->B'), ('B', 'B->D'), ('D', 'reverse-C->D'), ('C', 'C->E'), ('E', '')], [('A', 'A->B'), ('B', 'B->D'), ('D', 'D->E'), ('E', '')], [('A', 'A->D'), ('D', 'reverse-C->D'), ('C', 'C->E'), ('E', '')], [('A', 'A->D'), ('D', 'D->E'), ('E', '')]]
+        [[('A', 'A->B'), ('B', 'B->C'), ('C', 'C->E'), ('E', '')], [('A', 'A->B'), ('B', 'B->D'), \
+('D', 'reverse-C->D'), ('C', 'C->E'), ('E', '')], [('A', 'A->B'), ('B', 'B->D'), ('D', 'D->E'), ('E', '')], \
+[('A', 'A->D'), ('D', 'reverse-C->D'), ('C', 'C->E'), ('E', '')], [('A', 'A->D'), ('D', 'D->E'), ('E', '')]]
         >>> shortest_path_result.length
         9.0
         """
@@ -263,11 +271,11 @@ class Graph:
         all_shortest_paths_computed: set[str] = set()
 
         infinity: float = 1_000_000_000_000.0  # 1 billion km, Ontario road network
-        # road length sum should not be that big
+        # road length sum should and will not be that big
 
         # Note: we are using a list here instead of tuple, as we want to
-        # be able to mutate the set and tuples are immutable
-        # this list (value of dictionary) follows the same structure as our
+        # be able to mutate the set and tuples are immutable.
+        # This list (value of dictionary) follows the same structure as our
         # ShortestDistanceToVertex dataclass, with list length always being 3, and its elements
         # corresponding to ShortestDistanceToVertex's junction_id, shortest_distance_till_now and
         # shortest_paths_prev_vertex_ids respectively, and also follow the same representation
@@ -275,8 +283,8 @@ class Graph:
         # tuples/lists are faster than dataclass, and when I used that dataclass instead of what we have now
         # the code became approximately 20 times slower. This was quite significant for our code,
         # as we are working with over million edges and about half a million vertices, and
-        # code becoming 20 times slower in Dijktras algorithm meant what would run here in 1 second
-        # would take 20 seconds using dataclasses.
+        # code becoming 20 times slower in Dijktras algorithm meant what would run here in 0.5 seconds
+        # would take 10 seconds using dataclasses.
         distance: dict[str, list[str | float | set[tuple[str, str]]]] = {}
 
         for vertex in self.vertices:
@@ -296,7 +304,7 @@ class Graph:
                 ]
 
         # this tuple (each element of list) follows the same structure as our
-        # LenMinimizerCandidateRoads dataclass, with tuple length always being 3, and its elements
+        # LenMinimizerCandidateRoads dataclass, with tuple length always being 4, and its elements
         # corresponding to LenMinimizerCandidateRoads's length_from_junction, start_junction_id,
         # end_junction_id and road id respectively, and this tuple's corresponding arguments follow the
         # same representation invariants as that dataclass. Why didn't we use that dataclass then? For the same
@@ -305,7 +313,7 @@ class Graph:
 
         # heap related code adapted from https://docs.python.org/3/library/heapq.html
         # we are using a min heap because it is like a priority queue with push
-        # Big O time and pop Big O time as O(n) where n is the number of
+        # Big O time and pop Big O time as O(log n) where n is the number of
         # elements inside it. See https://stackoverflow.com/a/38833175 for
         # time complexity of these heap methods
         heapify(len_minimizer_candidate_roads)
@@ -343,32 +351,72 @@ class Graph:
                 #  what we already have indirectly stored in distance list
                 break
             else:
-                neighbours: list[Road] = self.vertices[current_vertex_id].neighbours
+                self._minimize_dist_to_neighbours(
+                    all_shortest_paths_computed=all_shortest_paths_computed,
+                    distance=distance,
+                    len_minimizer_candidate_road=len_minimizer_candidate_road,
+                    len_minimizer_candidate_roads=len_minimizer_candidate_roads,
+                    current_vertex_id=current_vertex_id
+                )
 
-                for road in neighbours:
-                    # relaxation step of Dijktras algorithm
-                    neighbour_junction: _Vertex = road.to_junction
-                    neighbour_junction_id: str = neighbour_junction.junction_id
+        return self._interpret_dijktras_results(
+            source_junction_id=source_junction_id,
+            target_junction_id=target_junction_id,
+            distance=distance,
+            infinity=infinity
+        )
 
-                    # don't minimize distance for something already in all_shortest_paths_computed set, it
-                    # already has all possible shortest paths to it
-                    if neighbour_junction_id not in all_shortest_paths_computed:
-                        shortest_dist_till_now_info: list[str | float | set[str]] = distance[neighbour_junction_id]
-                        potentially_less_distance: float = (
-                                len_minimizer_candidate_road[0] + road.length * 1.0)
-                        # multiply by 1.0 to ensure the result is a float and not an int
+    def _minimize_dist_to_neighbours(self, all_shortest_paths_computed: set[str],
+                                     distance: dict[str, list[str | float | set[tuple[str, str]]]],
+                                     len_minimizer_candidate_roads: list[tuple[float, str, str, str]],
+                                     len_minimizer_candidate_road: tuple[float, str, str, str],
+                                     current_vertex_id: str) -> None:
+        """
+        This is a mutating method.
 
-                        if shortest_dist_till_now_info[1] >= potentially_less_distance:
+        TODO: to continue this docstring
+        """
+        neighbours: list[Road] = self.vertices[current_vertex_id].neighbours
 
-                            shortest_dist_till_now_info[1] = potentially_less_distance
+        for road in neighbours:
+            if road.removed:
+                # if road is soft deleted, don't add it as a potential minimizing candidate
+                continue
+            else:
+                # relaxation step of Dijktras algorithm
+                neighbour_junction: _Vertex = road.to_junction
+                neighbour_junction_id: str = neighbour_junction.junction_id
 
-                            heappush(len_minimizer_candidate_roads, (
-                                potentially_less_distance,
-                                current_vertex_id,
-                                neighbour_junction_id,
-                                road.road_id,)
-                            )
+                # don't minimize distance for something already in all_shortest_paths_computed set, it
+                # already has all possible shortest paths to it
+                if neighbour_junction_id in all_shortest_paths_computed:
+                    continue
 
+                shortest_dist_till_now_info: list[str | float | set[str]] = distance[neighbour_junction_id]
+                potentially_less_distance: float = len_minimizer_candidate_road[0] + road.length // 1.0
+                # divide by 1.0 to ensure the result is a float and not an int and to strip decimals.
+
+                if shortest_dist_till_now_info[1] >= potentially_less_distance:
+                    shortest_dist_till_now_info[1] = potentially_less_distance
+
+                    heappush(len_minimizer_candidate_roads, (
+                        potentially_less_distance,
+                        current_vertex_id,
+                        neighbour_junction_id,
+                        road.road_id,)
+                    )
+
+    def _interpret_dijktras_results(
+            self,
+            source_junction_id: str,
+            target_junction_id: str,
+            distance: dict[str, list[str | float | set[tuple[str, str]]]],
+            infinity: float,
+    ) -> Optional[ShortestPathResult]:
+        """
+        TODO: to continue this docstring
+        infinity is what was used in Dijktras as infinity distance
+        """
         shortest_path_info: list[str | float | set[tuple[str, str]]] = distance[target_junction_id]
         shortest_path_length: float = shortest_path_info[1]
 
@@ -430,7 +478,7 @@ class Graph:
 
     def remove_road(self, road_id: str) -> None:
         """
-        Removes a road from the graph, and removes it from the neighbours of the vertices.
+        Soft remove a road from the graph by marking its remove attribute as removed
         If the road does not exist in the graph, the function does nothing
 
         Preconditions:
@@ -439,12 +487,13 @@ class Graph:
         """
         if road_id in self.roads:
             road: Road = self.roads[road_id]
-            from_vertex: _Vertex = road.from_junction
-            to_vertex: _Vertex = road.to_junction
-
-            from_vertex.neighbours.remove(road)
+            road.removed = True
+            # from_vertex: _Vertex = road.from_junction
+            # to_vertex: _Vertex = road.to_junction
+            #
+            # from_vertex.neighbours.remove(road)
             # to_vertex.neighbours.remove(road)
-            self.roads.pop(road_id)
+            # self.roads.pop(road_id)
 
     def add_road(self, from_junction_id: str, to_junction_id: str, length: float, road_id: str,
                  removed: bool, geometry: list[tuple[float, float]]) -> None:
@@ -551,8 +600,9 @@ class Graph:
 if __name__ == '__main__':
     doctest.testmod(verbose=True)
 
+    import python_ta
     python_ta.check_all(config={
         'max-line-length': 120,
         'disable': ['static_type_checker'],
-        'extra-imports': ['heapq', 'path_tree', 'coordinate'],
+        'extra-imports': ['path_tree', 'heapq'],
     })

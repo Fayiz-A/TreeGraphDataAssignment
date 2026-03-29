@@ -218,7 +218,8 @@ class StreamlitManager:
                         # will lead to reassignment, while we want to mutate and translate
                         # original coordinate's longitude and latitude
                         polyline_copy.append(
-                            (polyline_coordinate_longitude + signed_delta, polyline_coordinate_latitude)
+                            (polyline_coordinate_longitude + signed_delta,
+                             polyline_coordinate_latitude + signed_delta * -1)
                         )
 
                     if (min_latitude <= polyline_coordinate_latitude <= max_latitude and
@@ -455,7 +456,7 @@ class StreamlitManager:
                     "properties": {
                         "color": self._roads[road_id].colour,
                         "road_id": road_id,
-                        "length": self._roads[road_id].road.length
+                        "length": self._roads[road_id].road.length // 1.0
                     }
                 }
                 for road_id in self._roads

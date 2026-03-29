@@ -5,7 +5,6 @@ Unit test suite for Graph.compute_shortest_path method using network x's dijktra
 import networkx as nx
 from random import random, randint
 
-from coordinate import Coordinate
 from graph import Graph, ShortestPathResult, _Vertex
 from math import isclose
 
@@ -22,7 +21,7 @@ def _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num:
     graph: nx.DiGraph = nx.complete_graph(vertices_num, nx.DiGraph())
     test_graph: Graph = Graph()
 
-    coordinate: Coordinate = Coordinate(70.0, 70.0)
+    coordinate: tuple[float, float] = (70.0, 70.0)
 
     for (start, end) in graph.edges:
         random_weight: float = 1 + (random() * 100_000)
@@ -37,7 +36,7 @@ def _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num:
                             removed=False, geometry=[coordinate, coordinate]
                             )
 
-        graph.edges[start, end]['weight'] = random_weight
+        graph.edges[start, end]['weight'] = random_weight // 1.0
 
     return graph, test_graph
 

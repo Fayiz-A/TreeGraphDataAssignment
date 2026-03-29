@@ -112,25 +112,35 @@ class StreamlitManager:
         Preconditions:
             - isinstance(point, Coordinate)
         """
-        threshold: float = 200  # TODO: adjust after testing
         point_shape: Point = Point(point.latitude, point.longitude)
 
-        min_distance: float = 1_000_000_000_000
+        infinity: int = 1_000_000_000  # of course if we came here
+        # because something was clicked, the click distance will be less
+        # than 1 billion units.
+        min_distance: float = infinity
+        min_road_id: Optional[str] = None
+
         for ui_road in self._roads.values():
             if not ui_road.visible:
                 continue
 
             road: Road = ui_road.road
-            multiline: MultiLineString = MultiLineString([road.geometry])
-            if point_shape.distance(multiline) - threshold < min_distance:
-                min_distance = point_shape.distance(multiline) - threshold
-            if point_shape.distance(multiline) < threshold:
-                print(f'Distance from selected one is: {point_shape.distance(multiline)}')
-                return ui_road
+            polyline: list[tuple[float, float]] = road.geometry
+            multiline: MultiLineString = MultiLineString([[(coordinate[1], coordinate[0]) for coordinate in polyline]])
 
-        print(f'distance from click: {min_distance}')
+            distance_from_clicked_coordinate: float = point_shape.distance(multiline)
 
-        return None
+            if distance_from_clicked_coordinate < min_distance:
+                min_distance = point_shape.distance(multiline)
+                min_road_id = road.road_id
+
+        if min_road_id is None:
+            # this might happen if for some reason, our streamlit folium library messes up something,
+            # thus, we just return None, as if no road was selected.
+            return None
+        else:
+            print(f'distance from click: {min_distance}')
+            return self._roads[min_road_id]
 
     def _update_visible_roads_by_bounds(_self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
         """
@@ -275,7 +285,7 @@ class StreamlitManager:
                     )
                 )
 
-        print(f'Currently visible polylines tocuh distance min: {length}')
+        print(f'Currently visible polylines: {length}')
         return feature_group
 
     def _handle_map_events(self) -> None:
@@ -285,11 +295,16 @@ class StreamlitManager:
         print('handling event')
 
         state_map_info: dict = self._get_state_value_by_key('map_info')
-        last_clicked: Optional[dict] = state_map_info['last_clicked']
-        if last_clicked is None:
+        last_clicked_object: Optional[dict] = state_map_info['last_object_clicked']
+        if last_clicked_object is None:
             return
         else:
-            print(f'Clicked road id: {self._get_road_id_by_selection(Coordinate(last_clicked['lat'], last_clicked['lng']))}')
+            selected_road: Optional[UIRoad] = (
+                self._get_road_id_by_selection(Coordinate(last_clicked_object['lat'], last_clicked_object['lng'])))
+
+            if selected_road is not None:
+                selected_road.colour = '#ff0000'
+                self._selected_roads[selected_road.road.road_id] = selected_road
         # zoom: int = state_map_info['zoom']
         #
         # state_map_info_bounds: dict = state_map_info['bounds']
@@ -301,11 +316,15 @@ class StreamlitManager:
         #     Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
         # )
 
+    def _handle_button_press(self) -> None:
+        ...
+
     def display(self) -> None:
         """
         Display anything which should be displayed using streamlit, as this method is the only method
         that gets rerun as streamlit runs the app from top down on any update.
         """
+        print('\nDisplayin')
         state_map_info: dict = self._get_state_value_by_key('map_info')
 
         query_params = st.query_params
@@ -348,7 +367,10 @@ class StreamlitManager:
         # location needs latitude and longitude coordinates, opposite from our project order,
         # but since this is just one statement, switching is easy, and hence the order in
         # north_east_bounds_tuple
-        folium_map: folium.Map = folium.Map(location=north_east_bounds_tuple, zoom_start=zoom)
+        folium_map: folium.Map = folium.Map(location=(
+                south_west_bounds['lat']+((north_east_bounds['lat']-south_west_bounds['lat'])/2),
+                south_west_bounds['lng']+((north_east_bounds['lng'] - south_west_bounds['lng']) / 2)
+        ), zoom_start=zoom, max_zoom=19, min_zoom=5, zoom_control='topleft')
         self._update_visible_roads_by_bounds(zoom_level=zoom, bounds=bounds)
         feature_group_polylines: folium.FeatureGroup = self.add_polylines(bounds=bounds, zoom=zoom)
         feature_group_polylines.add_to(folium_map)
@@ -357,8 +379,9 @@ class StreamlitManager:
             fig=folium_map,
             feature_group_to_add=feature_group_polylines,
             key='map_info',
+            zoom=zoom,
             on_change=self._handle_map_events,
-            returned_objects=['last_clicked']
+            returned_objects=['last_object_clicked']
         )
 
         st.button('Reload Polylines', on_click=lambda: print('clicked'))

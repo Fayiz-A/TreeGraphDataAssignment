@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from coordinate import Coordinate
+
 
 class InfoDisplayState:
     def __init__(self):
@@ -24,11 +26,14 @@ class InfoDisplayDataLoadedState(InfoDisplayState):
     """
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass
 class ShortestPathSuccessState(InfoDisplayDataLoadedState):
     prev_length: float
     new_length: float
+    start_junction_location: Coordinate
+    end_junction_location: Coordinate
     shortest_paths: list[list[tuple[str, str]]]
+    path_displayed_index: int
 
 
 class JunctionDisconnectedState(InfoDisplayDataLoadedState):

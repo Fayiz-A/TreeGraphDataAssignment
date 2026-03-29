@@ -147,9 +147,11 @@ class RoadManager:
         """
         return self.graph.compute_shortest_path(source_junction_id, target_junction_id)
 
-    def check_removability(self, roads: list[str]) -> tuple[bool, list[str]]:
+    def check_removability(self, roads: list[str]) -> Optional[tuple[str, str]]:
         """
         TODO: complete docstring
+        Preconditions:
+            - len(roads) >= 2
         """
         return self.graph.is_valid_road_selection(roads)
 

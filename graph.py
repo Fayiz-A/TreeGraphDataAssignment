@@ -556,12 +556,10 @@ class Graph:
         if junction_id not in self.vertices:
             self.vertices[junction_id] = _Vertex(junction_id, [])
 
-    def is_valid_road_selection(self, road_ids: list[str]) -> tuple[bool, list[str]]:
+    def is_valid_road_selection(self, road_ids: list[str]) -> Optional[tuple[str, str]]:
         """
-        Return a tuple of:
-            - a bool that is true if there exists a connected valid path
-            - a list of the starting junction id and the ending junction id if there is a connected valid path,
-             otherwise, an empty list.
+        Return a tuple of the starting junction id and the ending junction id if there is a connected valid path,
+        otherwise return None.
 
         A valid path is defined as a set of roads such that there exists only 1 start point for the path and
         only one endpoint for the path, and if there are more than one paths that are disconnected, then only
@@ -572,7 +570,7 @@ class Graph:
 
         """
         if len(road_ids) == 0:
-            return False, []
+            return None
 
         free_starts: list = []
         free_ends: list = []
@@ -603,9 +601,9 @@ class Graph:
                 free_ends.append(end)
 
         if len(set(free_starts)) != 1 or len(set(free_ends)) != 1:
-            return False, []
+            return None
 
-        return True, [free_starts[0], free_ends[0]]
+        return free_starts[0], free_ends[0]
 
 
 if __name__ == '__main__':

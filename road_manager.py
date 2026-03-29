@@ -97,10 +97,10 @@ class RoadManager:
                 graph.add_road(from_junction_id=to_id, to_junction_id=from_id, length=length, road_id=f'{road_id}_neg',
                                removed=False, geometry=geometry[::-1])
             elif direction == 'Positive':
-                graph.add_road(from_junction_id=from_id, to_junction_id=to_id, length=length, road_id=road_id,
+                graph.add_road(from_junction_id=from_id, to_junction_id=to_id, length=length, road_id=f'{road_id}_one',
                                removed=False, geometry=geometry)
             elif direction == 'Negative':
-                graph.add_road(from_junction_id=to_id, to_junction_id=from_id, length=length, road_id=road_id,
+                graph.add_road(from_junction_id=to_id, to_junction_id=from_id, length=length, road_id=f'{road_id}_one',
                                removed=False, geometry=geometry[::-1])
             else:
                 print(f'Unknown direction value: {direction} for road {road_id}')
@@ -131,5 +131,5 @@ class RoadManager:
 
         return self.graph.compute_shortest_path(source_junction_id, target_junction_id)
 
-    def check_removability(self, roads: list[Road]) -> bool:
-        return self.graph.check_road_selection_is_valid(roads)
+    def check_removability(self, roads: list[str]) -> tuple[bool, list[str]]:
+        return self.graph.is_valid_road_selection(roads)

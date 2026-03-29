@@ -443,7 +443,7 @@ class Graph:
             to_vertex: _Vertex = road.to_junction
 
             from_vertex.neighbours.remove(road)
-            to_vertex.neighbours.remove(road)
+            # to_vertex.neighbours.remove(road)
             self.roads.pop(road_id)
 
     def add_road(self, from_junction_id: str, to_junction_id: str, length: float, road_id: str,

@@ -6,7 +6,7 @@ import pprint
 from collections.abc import dict_values
 from typing import Any, Optional
 
-from streamlit import cache_resource, session_state
+from streamlit import cache_data, cache_resource, session_state
 import streamlit as st
 
 from coordinate import Coordinate
@@ -17,7 +17,7 @@ from ui_road import UIRoad
 import streamlit_folium
 import folium
 import constants
-from graph import Road
+from graph import Road, ShortestPathResult
 from shapely.geometry import MultiLineString, Point
 
 
@@ -57,8 +57,9 @@ class StreamlitManager:
         }
 
         self._road_manager = RoadManager()
-        self._roads = {road_id: UIRoad(road=road, visible=True, colour='blue')
-                       for road_id, road in self._road_manager.graph.roads.items()}
+        self._roads = {
+            road_id: UIRoad(road=road, visible=True, colour=f'{'brown' if road_id[-4:] == '_one' else 'blue'}')
+            for road_id, road in self._road_manager.graph.roads.items()}
         self._selected_roads = {}
         self._info_display_state = InfoDisplayInitState()
 
@@ -104,7 +105,7 @@ class StreamlitManager:
     def _handle_road_removal(self) -> None:
         pass
 
-    def _get_road_id_by_selection(self, point: Coordinate) -> UIRoad | None:
+    def _get_road_id_by_selection(self, point: Coordinate) -> str | None:
         """
         Return the UIRoad whose geometric polyline is within a threshold distance
         from the given point, or None if no visible road is close enough.
@@ -140,8 +141,9 @@ class StreamlitManager:
             return None
         else:
             print(f'distance from click: {min_distance}')
-            return self._roads[min_road_id]
+            return min_road_id
 
+    @cache_data
     def _update_visible_roads_by_bounds(_self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
         """
         Update the visible roads according to the given zoom level, the road will be invisible if all portions are
@@ -299,13 +301,15 @@ class StreamlitManager:
         if last_clicked_object is None:
             return
         else:
-            selected_road: Optional[UIRoad] = (
+            selected_road_id: Optional[str] = (
                 self._get_road_id_by_selection(Coordinate(last_clicked_object['lat'], last_clicked_object['lng'])))
 
-            if selected_road is not None:
-                selected_road.colour = '#ff0000'
+            print(f'Road selected is: {selected_road_id}')
+            if selected_road_id is not None:
+                selected_road = self._roads[selected_road_id]
+                selected_road.colour = '#FF0000'
                 road: Road = selected_road.road
-                self._selected_roads[road.road_id] = road
+                self._selected_roads[selected_road_id] = road
         # zoom: int = state_map_info['zoom']
         #
         # state_map_info_bounds: dict = state_map_info['bounds']
@@ -319,12 +323,29 @@ class StreamlitManager:
 
     def _handle_button_press(self) -> None:
         road_manager: RoadManager = self._road_manager
-        roads: list[Road] = list(self._selected_roads.values())
-        if road_manager.check_removability(roads):
-            road_manager.remove_road_and_get_path()
+        road_ids: list[str] = list(self._selected_roads.keys())
+        removability_test_result: tuple[bool, list[str]] = road_manager.check_removability(road_ids)
+        if removability_test_result[0]:
+            source_and_end: list[str] = removability_test_result[1]
+            shortest_distance_result: Optional[ShortestPathResult] = road_manager.remove_road_and_get_path(
+                road_ids=road_ids,
+                source_junction_id=source_and_end[0],
+                target_junction_id=source_and_end[1])
+            if shortest_distance_result is None:
+                print('Path is disconnected')
+            else:
+                print(f'Length of shortest path now {shortest_distance_result.length}')
+                for shortest_path in shortest_distance_result.all_shortest_paths:
+                    print(shortest_path)
+                    vertices_end_index: int = len(shortest_path) - 1
+                    for index in range(0, vertices_end_index):
+                        vertex: tuple[str, str] = shortest_path[index]
+                        road: UIRoad = self._roads[vertex[1]]
+                        road.visible = True
+                        road.colour = 'green'
+
         else:
             print('CANNOT PERFORM MODIFIED DIJKTRAS')
-
 
     def display(self) -> None:
         """
@@ -375,16 +396,44 @@ class StreamlitManager:
         # but since this is just one statement, switching is easy, and hence the order in
         # north_east_bounds_tuple
         folium_map: folium.Map = folium.Map(location=(
-                south_west_bounds['lat']+((north_east_bounds['lat']-south_west_bounds['lat'])/2),
-                south_west_bounds['lng']+((north_east_bounds['lng'] - south_west_bounds['lng']) / 2)
-        ), zoom_start=zoom, max_zoom=19, min_zoom=5, zoom_control='topleft')
+            south_west_bounds['lat'] + ((north_east_bounds['lat'] - south_west_bounds['lat']) / 2),
+            south_west_bounds['lng'] + ((north_east_bounds['lng'] - south_west_bounds['lng']) / 2)
+        ), zoom_start=zoom, max_zoom=19, min_zoom=1)
         self._update_visible_roads_by_bounds(zoom_level=zoom, bounds=bounds)
-        feature_group_polylines: folium.FeatureGroup = self.add_polylines(bounds=bounds, zoom=zoom)
-        feature_group_polylines.add_to(folium_map)
+        # feature_group_polylines: folium.FeatureGroup = self.add_polylines(bounds=bounds, zoom=zoom)
+        # feature_group_polylines.add_to(folium_map)
+
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[lat, lon] for lat, lon in self._roads[road_id].road.geometry]
+                    },
+                    "properties": {
+                        "color": self._roads[road_id].colour,
+                        "road_id": road_id,
+                        "length": self._roads[road_id].road.length
+                    }
+                }
+                for road_id in self._roads
+                if self._roads[road_id].visible
+            ]
+        }
+
+        folium.GeoJson(geojson_data,
+                       style_function=lambda f: {
+                            "color": f["properties"]["color"],
+                        },
+                       tooltip=folium.GeoJsonTooltip(
+                           fields=["road_id", "length"],
+                        )).add_to(folium_map)
 
         streamlit_folium.st_folium(
             fig=folium_map,
-            feature_group_to_add=feature_group_polylines,
+            # feature_group_to_add=feature_group_polylines,
             key='map_info',
             zoom=zoom,
             on_change=self._handle_map_events,
@@ -392,6 +441,7 @@ class StreamlitManager:
         )
 
         st.button('Reload Polylines', on_click=lambda: print('clicked'))
+        st.button('Compute shortest path', on_click=self._handle_button_press)
 
 
 if __name__ == '__main__':

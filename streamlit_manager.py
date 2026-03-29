@@ -4,10 +4,10 @@ TODO: add docstring
 import doctest
 import pprint
 from collections.abc import dict_values
-from copy import deepcopy
-from typing import Any
+from typing import Any, Optional
 
 from streamlit import cache_resource, session_state
+import streamlit as st
 
 from coordinate import Coordinate
 from info_display import InfoDisplayState, InfoDisplayInitState
@@ -73,15 +73,33 @@ class StreamlitManager:
         else:
             self._road_average_length = 0
 
-        self._update_visible_roads_by_bounds(
-            zoom_level=13,
-            bounds=(Coordinate(43.68984603369737, -79.36489105224611),
-                    Coordinate(43.64638600677007, -79.42711830139162))
-        )
+        # TODO: remove console.log
+        st.html('''<script>
+                    setInterval(() => {
+                        if(window.frames['0'] != undefined && window.frames['0'].map != undefined) {
+                            let mapObject = window.frames['0'].map
+                            let zoom = mapObject.getZoom()
+                            let bounds = mapObject.getBounds()
 
-        self._update_state('map', self._build_folium_map(
-            north_east_bounds=Coordinate(43.68984603369737, -79.36489105224611),
-            zoom=13))
+                            // url setting code seen from https://stackoverflow.com/a/41542008
+                            let modifiedURL = new URL(location.href);
+
+                            modifiedURL.searchParams.set('zoom', window.frames['0'].map.getZoom());
+
+                            let northEast = bounds['_northEast']
+                            let southWest = bounds['_southWest']
+                            modifiedURL.searchParams.set('neLat', northEast['lat'],);
+                            modifiedURL.searchParams.set('neLng', northEast['lng'],);
+                            modifiedURL.searchParams.set('swLat', southWest['lat'],);
+                            modifiedURL.searchParams.set('swLng', southWest['lng'],);
+
+                            history.pushState(null, '', modifiedURL)
+                        }
+                    }, 100)
+                </script>''',
+                unsafe_allow_javascript=True  # this just means we trust our js code that we wrote, and are
+                # not running something untrusted like from API or concatenating some input
+                )
 
     def _handle_road_removal(self) -> None:
         pass
@@ -94,18 +112,23 @@ class StreamlitManager:
         Preconditions:
             - isinstance(point, Coordinate)
         """
-        threshold: float = 0.0005  # TODO: adjust after testing
+        threshold: float = 200  # TODO: adjust after testing
         point_shape: Point = Point(point.latitude, point.longitude)
 
+        min_distance: float = 1_000_000_000_000
         for ui_road in self._roads.values():
             if not ui_road.visible:
                 continue
 
             road: Road = ui_road.road
             multiline: MultiLineString = MultiLineString([road.geometry])
-
+            if point_shape.distance(multiline) - threshold < min_distance:
+                min_distance = point_shape.distance(multiline) - threshold
             if point_shape.distance(multiline) < threshold:
+                print(f'Distance from selected one is: {point_shape.distance(multiline)}')
                 return ui_road
+
+        print(f'distance from click: {min_distance}')
 
         return None
 
@@ -223,18 +246,6 @@ class StreamlitManager:
         # north_east_bounds_tuple
         folium_map: folium.Map = folium.Map(location=north_east_bounds_tuple, zoom_start=zoom)
 
-        roads: dict[str, UIRoad] = self._roads
-        for road_id in roads:
-            road: UIRoad = roads[road_id]
-
-            if road.visible:
-                road_data: Road = road.road
-                folium.PolyLine(
-                    locations=road_data.geometry,
-                    tooltip=road_data.road_id,
-                    color=road.colour
-                ).add_to(folium_map)
-
         return folium_map
 
     @cache_resource
@@ -259,12 +270,12 @@ class StreamlitManager:
                 feature_group.add_child(
                     folium.PolyLine(
                         locations=[(coordinate[1], coordinate[0]) for coordinate in polyline],
-                        tooltip=road_data.road_id,
+                        tooltip=f'Road id {road_id}; length: {road_data.length} meters',
                         color=road.colour
                     )
                 )
 
-        print(f'Currently added polylines: {length}')
+        print(f'Currently visible polylines tocuh distance min: {length}')
         return feature_group
 
     def _handle_map_events(self) -> None:
@@ -272,20 +283,23 @@ class StreamlitManager:
         TODO: write docstring
         """
         print('handling event')
+
         state_map_info: dict = self._get_state_value_by_key('map_info')
-
-        zoom: int = state_map_info['zoom']
-
-        state_map_info_bounds: dict = state_map_info['bounds']
-
-        north_east_bounds: dict = state_map_info_bounds['_northEast']
-        south_west_bounds: dict = state_map_info_bounds['_southWest']
-        bounds: tuple[Coordinate, Coordinate] = (
-            Coordinate(north_east_bounds['lat'], north_east_bounds['lng']),
-            Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
-        )
-
-        self._update_visible_roads_by_bounds(bounds=bounds, zoom_level=zoom)
+        last_clicked: Optional[dict] = state_map_info['last_clicked']
+        if last_clicked is None:
+            return
+        else:
+            print(f'Clicked road id: {self._get_road_id_by_selection(Coordinate(last_clicked['lat'], last_clicked['lng']))}')
+        # zoom: int = state_map_info['zoom']
+        #
+        # state_map_info_bounds: dict = state_map_info['bounds']
+        #
+        # north_east_bounds: dict = state_map_info_bounds['_northEast']
+        # south_west_bounds: dict = state_map_info_bounds['_southWest']
+        # bounds: tuple[Coordinate, Coordinate] = (
+        #     Coordinate(north_east_bounds['lat'], north_east_bounds['lng']),
+        #     Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
+        # )
 
     def display(self) -> None:
         """
@@ -294,10 +308,31 @@ class StreamlitManager:
         """
         state_map_info: dict = self._get_state_value_by_key('map_info')
 
-        zoom: int = state_map_info['zoom']
+        query_params = st.query_params
 
-        state_map_info_bounds: dict = state_map_info['bounds']
-        center: dict = state_map_info['center']
+        current_zoom_from_map: str = query_params.get('zoom')
+
+        zoom: int
+        state_map_info_bounds: dict
+
+        if current_zoom_from_map is not None:
+            zoom = int(current_zoom_from_map)
+            # 'neLat' and other query params are
+            # guaranteed not to be null, as zoom and these values are set together, unless something
+            # terribly goes wrong in which case it is a situation of data corruption in general.
+            state_map_info_bounds = {
+                '_northEast': {
+                    'lat': float(query_params.get('neLat')),
+                    'lng': float(query_params.get('neLng'))
+                },
+                '_southWest': {
+                    'lat': float(query_params.get('swLat')),
+                    'lng': float(query_params.get('swLng'))
+                }
+            }
+        else:
+            zoom = self._default_session_state_dict['map_info']['zoom']
+            state_map_info_bounds = state_map_info['bounds']
 
         north_east_bounds: dict = state_map_info_bounds['_northEast']
         south_west_bounds: dict = state_map_info_bounds['_southWest']
@@ -306,7 +341,15 @@ class StreamlitManager:
             Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
         )
 
-        folium_map: folium.Map = self._get_state_value_by_key('map')
+        north_east_bounds_tuple: tuple[float, float] = (
+            north_east_bounds['lat'], north_east_bounds['lng']
+        )
+        # University of Toronto area location coordinates
+        # location needs latitude and longitude coordinates, opposite from our project order,
+        # but since this is just one statement, switching is easy, and hence the order in
+        # north_east_bounds_tuple
+        folium_map: folium.Map = folium.Map(location=north_east_bounds_tuple, zoom_start=zoom)
+        self._update_visible_roads_by_bounds(zoom_level=zoom, bounds=bounds)
         feature_group_polylines: folium.FeatureGroup = self.add_polylines(bounds=bounds, zoom=zoom)
         feature_group_polylines.add_to(folium_map)
 
@@ -315,9 +358,10 @@ class StreamlitManager:
             feature_group_to_add=feature_group_polylines,
             key='map_info',
             on_change=self._handle_map_events,
-            center=(center['lat'], center['lng']),
             returned_objects=['last_clicked']
         )
+
+        st.button('Reload Polylines', on_click=lambda: print('clicked'))
 
 
 if __name__ == '__main__':

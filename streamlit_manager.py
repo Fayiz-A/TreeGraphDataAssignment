@@ -4,6 +4,7 @@ TODO: add docstring
 import doctest
 import pprint
 from collections.abc import dict_values
+from copy import deepcopy
 from typing import Any, Optional
 
 from streamlit import cache_data, cache_resource, session_state
@@ -58,7 +59,7 @@ class StreamlitManager:
 
         self._road_manager = RoadManager()
         self._roads = {
-            road_id: UIRoad(road=road, visible=True, colour=f'{'brown' if road_id[-4:] == '_one' else 'blue'}')
+            road_id: UIRoad(road=road, visible=True, colour=f'{'brown' if road_id[-4:] == '_one' else ('blue' if road_id[-4:] == '_pos' else 'black')}')
             for road_id, road in self._road_manager.graph.roads.items()}
         self._selected_roads = {}
         self._info_display_state = InfoDisplayInitState()
@@ -169,6 +170,8 @@ class StreamlitManager:
 
         total: int = 0
         all_roads: dict_values[UIRoad] = _self._roads.values()
+        delta: float = constants.LONGITUDE_TRANSLATION_DELTA
+
         for ui_road in all_roads:
             road: Road = ui_road.road
             length: float = road.length
@@ -179,15 +182,52 @@ class StreamlitManager:
             bounds_check_passed: bool = False
 
             if length_check_passed:
-                for coord in road.geometry:
+                translation_factor: int = 0  # if this is 0, that means
+                # don't translate, if 1 then the road needs +ve translation,
+                # if -1 then negative translation
+
+                road_id: str = road.road_id
+                end_four_letters: str = road_id[-4:]  # guaranteed to exist, since we add road ids
+                # with suffixes of 4 letters always
+
+                # no need to translate single directional roads
+                if end_four_letters != '_one':
+                    if end_four_letters == '_pos':
+                        translation_factor = 1
+                    elif end_four_letters == '_neg':
+                        translation_factor = -1
+
+                signed_delta: float = (delta * translation_factor) / 2
+
+                polyline: list[tuple[float, float]] = road.geometry
+
+                # so we don't mutate the ones who have same polyline instance (eg the reverse of this in
+                # other direction if road is biderection) don't get mutated, else it defeates the purpose of
+                # translation
+
+                # the below will be used if and only if we are translating (meaning translation_factor != 0
+                polyline_copy: list[tuple[float, float]] = []
+
+                for coord in polyline:
                     # our natural project order
                     polyline_coordinate_latitude: float = coord[1]
                     polyline_coordinate_longitude: float = coord[0]
 
+                    if translation_factor != 0:
+                        # don't do something like polyline_coordinate_longitude += as that
+                        # will lead to reassignment, while we want to mutate and translate
+                        # original coordinate's longitude and latitude
+                        polyline_copy.append(
+                            (polyline_coordinate_longitude + signed_delta, polyline_coordinate_latitude)
+                        )
+
                     if (min_latitude <= polyline_coordinate_latitude <= max_latitude and
                             min_longitude <= polyline_coordinate_longitude <= max_longitude):
                         bounds_check_passed = True
-                        break
+                        # break
+
+                if translation_factor != 0:
+                    road.geometry = polyline_copy
 
             ui_road.visible = length_check_passed and bounds_check_passed
             if ui_road.visible:

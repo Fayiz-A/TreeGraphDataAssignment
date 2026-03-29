@@ -100,6 +100,7 @@ class RoadManager:
                 graph.add_road(from_junction_id=from_id, to_junction_id=to_id, length=length, road_id=f'{road_id}_one',
                                removed=False, geometry=geometry)
             elif direction == 'Negative':
+                # TODO: check if geometry reveral is fine or not
                 graph.add_road(from_junction_id=to_id, to_junction_id=from_id, length=length, road_id=f'{road_id}_one',
                                removed=False, geometry=geometry[::-1])
             else:

@@ -27,7 +27,7 @@ class StreamlitManager:
     """
     _road_manager: RoadManager
     _roads: dict[str, UIRoad]
-    _selected_roads: dict[str, UIRoad]
+    _selected_roads: dict[str, Road]
     _road_average_length: float
     _info_display_state: InfoDisplayState
     _default_session_state_dict: dict[str, Any]
@@ -304,7 +304,8 @@ class StreamlitManager:
 
             if selected_road is not None:
                 selected_road.colour = '#ff0000'
-                self._selected_roads[selected_road.road.road_id] = selected_road
+                road: Road = selected_road.road
+                self._selected_roads[road.road_id] = road
         # zoom: int = state_map_info['zoom']
         #
         # state_map_info_bounds: dict = state_map_info['bounds']
@@ -317,7 +318,13 @@ class StreamlitManager:
         # )
 
     def _handle_button_press(self) -> None:
-        ...
+        road_manager: RoadManager = self._road_manager
+        roads: list[Road] = list(self._selected_roads.values())
+        if road_manager.check_removability(roads):
+            road_manager.remove_road_and_get_path()
+        else:
+            print('CANNOT PERFORM MODIFIED DIJKTRAS')
+
 
     def display(self) -> None:
         """

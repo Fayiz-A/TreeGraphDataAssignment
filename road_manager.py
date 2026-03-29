@@ -132,4 +132,4 @@ class RoadManager:
         return self.graph.compute_shortest_path(source_junction_id, target_junction_id)
 
     def check_removability(self, roads: list[Road]) -> bool:
-        pass
+        return self.graph.check_road_selection_is_valid(roads)

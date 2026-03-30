@@ -1,0 +1,19 @@
+# External python libraries used in this project:
+
+# Testing and code checking
+python-ta
+
+# Map display and interaction
+streamlit
+streamlit-folium
+folium
+
+# Geometry and click detection
+shapely
+
+# Data loading
+orjson
+
+# this is used only in our unit test suite file test_compute_shortest_path.py for testing purposes, and other
+# it has nothing to do with our project
+networkx

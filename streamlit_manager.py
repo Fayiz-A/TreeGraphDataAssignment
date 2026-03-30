@@ -786,10 +786,11 @@ class StreamlitManager:
                     st.text('Please note that if you zoom in too much and then perform some action, '
                             'you wil have to zoom out and press reload polylines to see polylines '
                             'after your action is done. For instance, if you zoom in to remove a polyline, '
-                            'and then you click Compute Shortest Path, you might have to zoom out '
-                            'and press Reload Polylines button to see the full shortest path. This rendering of '
+                            'and then you click Compute Shortest Path, and then you zoom out, '
+                            'to see shortest paths, you might have to press Reload Polylines button '
+                            'to see all other roads to get a full context. This lazy rendering of '
                             'polylines as per zoom has been done for performance reasons, as Python is '
-                            'is quite slow on its own.')
+                            'quite slow on its own.')
 
                 with columns[0]:
                     streamlit_folium.st_folium(

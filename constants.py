@@ -20,11 +20,10 @@ INFINITY: int = 1_000_000_000_000
 
 ROAD_POSITIVE_SUFFIX: str = '_pos'
 ROAD_NEGATIVE_SUFFIX: str = '_neg'
-ROAD_UNIDIRECTIONAL_SUFFIX: str = '_one'
 
 SELECTED_ROAD_COLOUR: str = '#FF0000'  # red colour
-SHORTEST_PATH_ROAD_COLOUR: str = '#008000'  # green colour
+SHORTEST_PATH_ROAD_COLOUR: str = '#13f207'  # green colour
 
 ROAD_UNIDIRECTIONAL_COLOR: str = '#492201'  # brown colour
-ROAD_POSITIVE_COLOR: str = '#00FFFF'  # blue colour
+ROAD_POSITIVE_COLOR: str = '#69a2ff'  # blue colour
 ROAD_NEGATIVE_COLOR: str = '#000000'  # black colour

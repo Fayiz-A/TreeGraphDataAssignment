@@ -201,7 +201,7 @@ class StreamlitManager:
         elif end_four_chars == constants.ROAD_NEGATIVE_SUFFIX:
             color = constants.ROAD_NEGATIVE_COLOR
         else:
-            # it is a uni directional road
+            # fallback colour
             color = constants.ROAD_UNIDIRECTIONAL_COLOR
 
         return color
@@ -741,14 +741,6 @@ class StreamlitManager:
                     st.button('Compute Shortest Path', on_click=self._handle_compute_shortest_path)
                     st.button('Reset', on_click=self.reset)
 
-                    st.text('Please note that if you zoom in too much and then perform some action, '
-                            'you wil have to zoom out and press reload polylines to see polylines '
-                            'after your action is done. For instance, if you zoom in to remove a polyline, '
-                            'and then you click Compute Shortest Path, you might have to zoom out '
-                            'and press Reload Polylines button to see the full shortest path. This rendering of '
-                            'polylines as per zoom has been done for performance reasons, as Python is '
-                            'is quite slow on its own.')
-
                     if isinstance(info_display_state, ShortestPathSuccessState):
                         folium.Marker(
                             location=info_display_state.start_junction_location.to_tuple(),
@@ -761,13 +753,14 @@ class StreamlitManager:
 
                         total_shortest_paths: int = len(info_display_state.shortest_paths)
                         many_shortest_paths_present: bool = total_shortest_paths > 1
+                        path_word_as_per_number: str = f'path{'s' if many_shortest_paths_present else ''}'
 
                         st.text('Shortest paths computed successfully.')
                         st.text(f'There {'are' if many_shortest_paths_present else 'is'} in total '
                                 f'{total_shortest_paths} shortest '
-                                f'path{'s' if many_shortest_paths_present else ''}.')
+                                f'{path_word_as_per_number}.')
                         st.text(f'Displaying path number {info_display_state.path_displayed_index + 1} '
-                                f'out of {total_shortest_paths} path{'s' if many_shortest_paths_present else ''}')
+                                f'out of {total_shortest_paths} {path_word_as_per_number}')
                         st.text('Previous length of shortest path before removal of road segment was '
                                 f'{info_display_state.prev_length} meters.')
                         st.text('Now, after removal, the length of shortest path '
@@ -788,6 +781,14 @@ class StreamlitManager:
                                 'end/start point of some other road respectively. You may want to press '
                                 'reset and try again.'
                                 )
+
+                    st.text('Please note that if you zoom in too much and then perform some action, '
+                            'you wil have to zoom out and press reload polylines to see polylines '
+                            'after your action is done. For instance, if you zoom in to remove a polyline, '
+                            'and then you click Compute Shortest Path, you might have to zoom out '
+                            'and press Reload Polylines button to see the full shortest path. This rendering of '
+                            'polylines as per zoom has been done for performance reasons, as Python is '
+                            'is quite slow on its own.')
 
                 with columns[0]:
                     streamlit_folium.st_folium(

@@ -468,6 +468,7 @@ class StreamlitManager:
             source_road_id: str = removability_test_result[0]
             target_road_id: str = removability_test_result[1]
 
+            road_manager.restore_removed_roads()  # prevent previously deleted roads from affecting us now.
             prev_shortest_distance: Optional[ShortestPathResult] = road_manager.get_shortest_path(
                 source_junction_id=source_road_id,
                 target_junction_id=target_road_id

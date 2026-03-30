@@ -1,12 +1,14 @@
 """
+Ontario Road Closure Analysis App
+================================
+
 Unit test suite for Graph.compute_shortest_path method using network x's dijktras method
 """
 
 import networkx as nx
 from random import random, randint
 
-from coordinate import Coordinate
-from graph import Graph, ShortestPathResult, _Vertex
+from graph import Graph, ShortestPathResult, Vertex
 from math import isclose
 
 import timeit
@@ -22,7 +24,7 @@ def _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num:
     graph: nx.DiGraph = nx.complete_graph(vertices_num, nx.DiGraph())
     test_graph: Graph = Graph()
 
-    coordinate: Coordinate = Coordinate(70.0, 70.0)
+    coordinate: tuple[float, float] = (70.0, 70.0)
 
     for (start, end) in graph.edges:
         random_weight: float = 1 + (random() * 100_000)
@@ -37,7 +39,7 @@ def _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num:
                             removed=False, geometry=[coordinate, coordinate]
                             )
 
-        graph.edges[start, end]['weight'] = random_weight
+        graph.edges[start, end]['weight'] = random_weight // 1.0
 
     return graph, test_graph
 
@@ -56,7 +58,7 @@ def test_compute_shortest_path() -> None:
     shortest_path_matrix = dict(nx.all_pairs_dijkstra_path(nx_graph))
     shortest_path_length_matrix = dict(nx.all_pairs_dijkstra_path_length(nx_graph))
 
-    test_graph_vertices: dict[str, _Vertex] = test_graph.vertices
+    test_graph_vertices: dict[str, Vertex] = test_graph.vertices
 
     for start_vertex in test_graph_vertices:
         for end_vertex in test_graph_vertices:
@@ -78,6 +80,7 @@ def test_compute_shortest_path() -> None:
 
 
 def test_time_compute_shortest_path() -> None:
+    # performance testing
     graphs: tuple[nx.DiGraph, Graph] = \
         _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num=1000)  # approximately
     # 500,000 edges/roads
@@ -99,5 +102,5 @@ def test_time_compute_shortest_path() -> None:
 
     # note: the doctest might take more time than seconds, as it includes time for
     # _generate_random_directed_weighted_complete_graphs_for_testing method also, but
-    # what matters is the time taken by
+    # what matters is the time taken by compute_shortest_path method
     assert seconds < 2

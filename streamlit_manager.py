@@ -1,6 +1,8 @@
 """
-TODO: add docstring
+This file contains the code for Boundary class Streamlit Manager. It is the file which
+user interacts with directly.
 """
+
 import doctest
 from collections.abc import ValuesView
 from copy import deepcopy
@@ -11,7 +13,6 @@ import streamlit as st
 import streamlit_folium
 import folium
 from shapely.geometry import MultiLineString, Point
-from streamlit.runtime.state import QueryParamsProxy
 
 from coordinate import Coordinate
 from info_display import InfoDisplayDataLoadedState, InfoDisplayState, InfoDisplayLoadingState, \
@@ -24,8 +25,23 @@ from graph import Road, ShortestPathResult
 
 class StreamlitManager:
     """
-    TODO: add docstring and representation invariants
+    The boundary class of this project which the user interacts with. Its job is not to
+    perform any business logic like fetching data or building graphs. Its job is only and only
+    to deal with UI related logic.
+
+    There are no public attributes to this class, as the only interaction permitted to this class
+    is by user interaction or for trivial bootstrapping code like in main.py that cannot be
+    written in class due to framework limitations.
     """
+    # Private instance attributes:
+    #   - _road_manager: instance of service class (the one which handles business logic and mediates
+    #     between Graph and this class).
+    #   - _roads: a mapping between road id and UIRoad
+    #   - _selected_roads: a mapping between road id and roads which are currently selected by user
+    #   - _road_average_length: average length of roads in our data set, useful for our UI related
+    #     display logic.
+    #   - _default_session_state_dict: a default fallback dictionary in case Streamlit's session state does
+    #     not have the required values.
     _road_manager: RoadManager
     _roads: dict[str, UIRoad]
     _selected_roads: dict[str, Road]
@@ -34,7 +50,9 @@ class StreamlitManager:
 
     def __init__(self) -> None:
         """
-        Initialize StreamlitManager with the Ontario road network data and default display settings.
+        Initialize StreamlitManager with the Ontario road network data and default display settings, and
+        add code to run Javascript to update query params with latest map bounds and zoom informations
+        periodically.
         """
         self._set_info_display_state(InfoDisplayLoadingState())
 
@@ -578,7 +596,8 @@ class StreamlitManager:
             - first element of tuple is zoom, second element of tuple is a tuple of Coordinates with first
             one as north east coordinates and seconds one as south west coordinates
         """
-        query_params: QueryParamsProxy = st.query_params
+        query_params = st.query_params  # we don't write type annotations for this, as its type is a private
+        # variable in streamlit libraries code.
 
         current_zoom_from_map: str = query_params.get('zoom')
 
@@ -804,6 +823,7 @@ if __name__ == '__main__':
     python_ta.check_all(config={
         'max-line-length': 120,
         'disable': ['static_type_checker'],
+        'max-nested-blocks': 4,
         'extra-imports': ['coordinate', 'info_display', 'road_manager', 'ui_road', 'graph',
                           'streamlit_folium', 'folium', 'streamlit', 'shapely.geometry', 'collections.abc',
                           'constants', 'copy'],

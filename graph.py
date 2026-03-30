@@ -605,7 +605,7 @@ class Graph:
         if junction_id not in self.vertices:
             self.vertices[junction_id] = Vertex(junction_id, [])
 
-    def is_valid_road_selection(self, road_ids: list[str]) -> Optional[tuple[str, str]]:
+    def check_is_valid_road_selection(self, road_ids: list[str]) -> Optional[tuple[str, str]]:
         """
         Return a tuple of the starting junction id and the ending junction id if there is a connected valid path,
         otherwise return None.

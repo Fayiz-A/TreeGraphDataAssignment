@@ -133,7 +133,7 @@ class RoadManager:
     def check_removability(self, roads: list[str]) -> Optional[tuple[str, str]]:
         """
         Return a tuple if all roads satisfy the condition in
-        self.graph.is_valid_road_selection method (see its docstring for details) or None if
+        self.graph.check_is_valid_road_selection method (see its docstring for details) or None if
         they don't. The tuple returned would have its first element as the start junction id
         and second element as end junction id, where start and end are determined from the free
         ends of the sequence of roads. See the aforementioned method for details.
@@ -141,7 +141,7 @@ class RoadManager:
         Preconditions:
             - len(roads) >= 2
         """
-        return self.graph.is_valid_road_selection(roads)
+        return self.graph.check_is_valid_road_selection(roads)
 
     def get_roads(self) -> dict[str, Road]:
         """

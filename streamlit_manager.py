@@ -1,4 +1,7 @@
 """
+Ontario Road Closure Analysis App
+================================
+
 This file contains the code for Boundary class Streamlit Manager. It is the file which
 user interacts with directly.
 """
@@ -15,7 +18,7 @@ import folium
 from shapely.geometry import MultiLineString, Point
 
 from coordinate import Coordinate
-from fast_file_loader import FastGeoJsonFileLoader
+from fast_geo_json_file_loader import FastGeoJsonFileLoader
 from info_display import InfoDisplayDataLoadedState, InfoDisplayErrorState, InfoDisplayState, InfoDisplayLoadingState, \
     InvalidRoadSelectionsState, JunctionDisconnectedState, ShortestPathSuccessState
 from road_manager import RoadManager
@@ -80,7 +83,9 @@ class StreamlitManager:
             self._set_info_display_state(InfoDisplayLoadingState())
 
             self._road_manager = RoadManager()
-            data_fetched: bool = self._road_manager.fetch_data_and_build_graph(FastGeoJsonFileLoader(constants.ORN_FILE_NAME))
+            data_fetched: bool = self._road_manager.fetch_data_and_build_graph(FastGeoJsonFileLoader(
+                constants.ORN_FILE_NAME)
+            )
 
             self._set_info_display_state(InfoDisplayLoadingState())
 
@@ -799,5 +804,5 @@ if __name__ == '__main__':
         'max-nested-blocks': 4,
         'extra-imports': ['coordinate', 'info_display', 'road_manager', 'ui_road', 'graph',
                           'streamlit_folium', 'folium', 'streamlit', 'shapely.geometry', 'collections.abc',
-                          'constants', 'copy', 'fast_file_loader'],
+                          'constants', 'copy', 'fast_geo_json_file_loader'],
     })

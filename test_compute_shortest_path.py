@@ -1,4 +1,7 @@
 """
+Ontario Road Closure Analysis App
+================================
+
 Unit test suite for Graph.compute_shortest_path method using network x's dijktras method
 """
 
@@ -77,6 +80,7 @@ def test_compute_shortest_path() -> None:
 
 
 def test_time_compute_shortest_path() -> None:
+    # performance testing
     graphs: tuple[nx.DiGraph, Graph] = \
         _generate_random_directed_weighted_complete_graphs_for_testing(vertices_num=1000)  # approximately
     # 500,000 edges/roads
@@ -98,5 +102,5 @@ def test_time_compute_shortest_path() -> None:
 
     # note: the doctest might take more time than seconds, as it includes time for
     # _generate_random_directed_weighted_complete_graphs_for_testing method also, but
-    # what matters is the time taken by
+    # what matters is the time taken by compute_shortest_path method
     assert seconds < 2

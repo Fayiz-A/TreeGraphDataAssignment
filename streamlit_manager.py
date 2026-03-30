@@ -205,7 +205,21 @@ class StreamlitManager:
             return min_road_id
 
     @cache_data
-    def _update_visible_roads_by_bounds(_self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
+    def _compute_visible_roads_cached(_self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
+        """
+        This is a cached version of _compute_visible_roads. Use this where possible.
+        Update the visible roads according to the given zoom level, the road will be invisible if all portions are
+        not in the current bounds or the road length is too minor to display. If the zoom level given is equal
+        to or greater than 13, all the roads should be visible that pass the aforementioned bound check.
+
+        Preconditions:
+            - constants.MIN_ZOOM <= zoom_level <= constants.MAX_ZOOM
+
+        TODO: explain why _self not self; and why bounds and zoom not used
+        """
+        _self._compute_visible_roads(zoom_level=zoom_level, bounds=bounds)
+
+    def _compute_visible_roads(self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
         """
         Update the visible roads according to the given zoom level, the road will be invisible if all portions are
         not in the current bounds or the road length is too minor to display. If the zoom level given is equal
@@ -216,7 +230,8 @@ class StreamlitManager:
 
         TODO: explain why _self not self; and why bounds and zoom not used
         """
-        length_bound: float = (constants.MAX_ZOOM - zoom_level + 1) * _self._road_average_length
+
+        length_bound: float = (constants.MAX_ZOOM - zoom_level + 1) * self._road_average_length
 
         northeast_candidate: Coordinate = bounds[0]
         southwest_candidate: Coordinate = bounds[1]
@@ -231,7 +246,7 @@ class StreamlitManager:
         total: int = 0
 
         # syntax of ValuesView seen from https://stackoverflow.com/a/58013168
-        all_roads: ValuesView[UIRoad] = _self._roads.values()
+        all_roads: ValuesView[UIRoad] = self._roads.values()
         delta: float = constants.LONGITUDE_TRANSLATION_DELTA
 
         for ui_road in all_roads:
@@ -315,6 +330,11 @@ class StreamlitManager:
         self._set_info_display_state(InfoDisplayDataLoadedState())
         self._road_manager.restore_removed_roads()
 
+        zoom_and_bounds: tuple[int, tuple[Coordinate, Coordinate]] = self._get_current_zoom_and_bounds()
+        # use non cached version since the cached one won't update if bounds or zoom don't change,
+        # whcih they haven't
+        self._compute_visible_roads(zoom_level=zoom_and_bounds[0], bounds=zoom_and_bounds[1])
+
     def _get_state_value_by_key(self, key: str) -> Any:
         """
         TODO: write docstring
@@ -361,6 +381,8 @@ class StreamlitManager:
 
         info_display_state: InfoDisplayState = self._get_info_display_state()
 
+        self._set_info_display_state(InfoDisplayLoadingState())
+
         if isinstance(info_display_state, ShortestPathSuccessState):
             shortest_paths: list[list[tuple[str, str]]] = info_display_state.shortest_paths
             for path in shortest_paths:
@@ -368,8 +390,6 @@ class StreamlitManager:
                 for index in range(0, path_end_index):
                     road_id: str = path[index][1]
                     self._roads[road_id].colour = self._get_apt_colour_by_road_id(road_id)
-
-        self._set_info_display_state(InfoDisplayLoadingState())
 
         road_manager: RoadManager = self._road_manager
         road_ids: list[str] = list(selected_roads.keys())
@@ -446,7 +466,11 @@ class StreamlitManager:
             )
 
     def _shift_to_next_shortest_path(self) -> None:
-
+        """
+        Preconditions:
+            - isinstance(ShortestPathSuccessState, self._get_info_display_state())
+        :return:
+        """
         # cast syntax seen from https://stackoverflow.com/a/75010658
         info_display_state: ShortestPathSuccessState = cast(ShortestPathSuccessState, self._get_info_display_state())
 
@@ -469,6 +493,46 @@ class StreamlitManager:
         updated_info_display_state.path_displayed_index = next_index
         self._set_info_display_state(updated_info_display_state)
 
+    def _get_current_zoom_and_bounds(self) -> tuple[int, tuple[Coordinate, Coordinate]]:
+        """
+        TODO
+        :return:
+        """
+        query_params = st.query_params
+
+        current_zoom_from_map: str = query_params.get('zoom')
+
+        zoom: int
+        state_map_info_bounds: dict
+
+        if current_zoom_from_map is not None:
+            zoom = int(current_zoom_from_map)
+            # 'neLat' and other query params are
+            # guaranteed not to be null, as zoom and these values are set together, unless something
+            # terribly goes wrong in which case it is a situation of data corruption in general.
+            state_map_info_bounds = {
+                '_northEast': {
+                    'lat': float(query_params.get('neLat')),
+                    'lng': float(query_params.get('neLng'))
+                },
+                '_southWest': {
+                    'lat': float(query_params.get('swLat')),
+                    'lng': float(query_params.get('swLng'))
+                }
+            }
+        else:
+            map_info: dict = self._default_session_state_dict['map_info']
+            zoom = map_info['zoom']
+            state_map_info_bounds = map_info['bounds']
+
+        north_east_bounds: dict = state_map_info_bounds['_northEast']
+        south_west_bounds: dict = state_map_info_bounds['_southWest']
+        bounds: tuple[Coordinate, Coordinate] = (
+            Coordinate(north_east_bounds['lat'], north_east_bounds['lng']),
+            Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
+        )
+        return zoom, bounds
+
     def display(self) -> None:
         """
         Display anything which should be displayed using streamlit, as this method is the only method
@@ -485,43 +549,51 @@ class StreamlitManager:
 
             with (st.spinner('Building Map')):
 
-                query_params = st.query_params
+                # query_params = st.query_params
+                #
+                # current_zoom_from_map: str = query_params.get('zoom')
+                #
+                # zoom: int
+                # state_map_info_bounds: dict
+                #
+                # if current_zoom_from_map is not None:
+                #     zoom = int(current_zoom_from_map)
+                #     # 'neLat' and other query params are
+                #     # guaranteed not to be null, as zoom and these values are set together, unless something
+                #     # terribly goes wrong in which case it is a situation of data corruption in general.
+                #     state_map_info_bounds = {
+                #         '_northEast': {
+                #             'lat': float(query_params.get('neLat')),
+                #             'lng': float(query_params.get('neLng'))
+                #         },
+                #         '_southWest': {
+                #             'lat': float(query_params.get('swLat')),
+                #             'lng': float(query_params.get('swLng'))
+                #         }
+                #     }
+                # else:
+                #     zoom = self._default_session_state_dict['map_info']['zoom']
+                #     state_map_info_bounds = self._default_session_state_dict['map_info']['bounds']
+                #
+                # north_east_bounds: dict = state_map_info_bounds['_northEast']
+                # south_west_bounds: dict = state_map_info_bounds['_southWest']
+                # bounds: tuple[Coordinate, Coordinate] = (
+                #     Coordinate(north_east_bounds['lat'], north_east_bounds['lng']),
+                #     Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
+                # )
 
-                current_zoom_from_map: str = query_params.get('zoom')
+                zoom_and_bounds: tuple[int, tuple[Coordinate, Coordinate]] = self._get_current_zoom_and_bounds()
+                zoom: int = zoom_and_bounds[0]
+                bounds: tuple[Coordinate, Coordinate] = zoom_and_bounds[1]
 
-                zoom: int
-                state_map_info_bounds: dict
+                # this is from _get_current_zoom_and_bounds return post condition
+                north_east_bounds = bounds[0]
+                south_west_bounds = bounds[1]
 
-                if current_zoom_from_map is not None:
-                    zoom = int(current_zoom_from_map)
-                    # 'neLat' and other query params are
-                    # guaranteed not to be null, as zoom and these values are set together, unless something
-                    # terribly goes wrong in which case it is a situation of data corruption in general.
-                    state_map_info_bounds = {
-                        '_northEast': {
-                            'lat': float(query_params.get('neLat')),
-                            'lng': float(query_params.get('neLng'))
-                        },
-                        '_southWest': {
-                            'lat': float(query_params.get('swLat')),
-                            'lng': float(query_params.get('swLng'))
-                        }
-                    }
-                else:
-                    zoom = self._default_session_state_dict['map_info']['zoom']
-                    state_map_info_bounds = self._default_session_state_dict['map_info']['bounds']
-
-                north_east_bounds: dict = state_map_info_bounds['_northEast']
-                south_west_bounds: dict = state_map_info_bounds['_southWest']
-                bounds: tuple[Coordinate, Coordinate] = (
-                    Coordinate(north_east_bounds['lat'], north_east_bounds['lng']),
-                    Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
-                )
-
-                south_west_bounds_lat: float = south_west_bounds['lat']
-                south_west_bounds_lng: float = south_west_bounds['lng']
-                north_east_bounds_lat: float = north_east_bounds['lat']
-                north_east_bounds_lng: float = north_east_bounds['lng']
+                south_west_bounds_lat: float = south_west_bounds.latitude
+                south_west_bounds_lng: float = south_west_bounds.longitude
+                north_east_bounds_lat: float = north_east_bounds.latitude
+                north_east_bounds_lng: float = north_east_bounds.longitude
 
                 # compute center of map from bounds, which is what location parameter takes below.
                 folium_map: folium.Map = folium.Map(location=(
@@ -529,7 +601,7 @@ class StreamlitManager:
                     south_west_bounds_lng + ((north_east_bounds_lng - south_west_bounds_lng) / 2)
                 ), zoom_start=zoom, max_zoom=constants.MAX_ZOOM, min_zoom=constants.MIN_ZOOM)
 
-                self._update_visible_roads_by_bounds(zoom_level=zoom, bounds=bounds)
+                self._compute_visible_roads_cached(zoom_level=zoom, bounds=bounds)
 
                 roads: dict[str, UIRoad] = self._roads
 
@@ -575,7 +647,8 @@ class StreamlitManager:
                 ).add_to(folium_map)
 
                 # st.column syntax seen from https://docs.streamlit.io/develop/api-reference/layout/st.columns
-                columns: list = st.columns(2)
+                columns: list = st.columns([0.7, 0.3])  # 70 % and 30 % space allotted
+                # for map and buttons/text on screen
 
                 with columns[1]:
                     st.text(f'Roads Currently Selected: {len(self._selected_roads)}')
@@ -586,11 +659,10 @@ class StreamlitManager:
                     st.text('Please note that if you zoom in too much and then perform some action, '
                             'you wil have to zoom out and press reload polylines to see polylines '
                             'after your action is done. For instance, if you zoom in to remove a polyline, '
-                            'and then you click Compute Shortest Path, you might have to zoom out to see '
-                            'and press Reload Polylines button to see the full shortest path. This has been '
-                            'done for performance reasons, as Python is quite slow when it comes to rendering '
-                            'on web, as Python is not suitable for web development and is slow enough on its own '
-                            'as well.')
+                            'and then you click Compute Shortest Path, you might have to zoom out '
+                            'and press Reload Polylines button to see the full shortest path. This rendering of '
+                            'polylines as per zoom has been done for performance reasons, as Python is '
+                            'is quite slow on its own.')
 
                     print(type(info_display_state))
                     if isinstance(info_display_state, ShortestPathSuccessState):

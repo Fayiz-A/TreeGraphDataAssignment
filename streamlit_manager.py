@@ -8,18 +8,18 @@ from typing import Any, Optional, cast
 
 from streamlit import cache_data, session_state
 import streamlit as st
+import streamlit_folium
+import folium
+from shapely.geometry import MultiLineString, Point
+from streamlit.runtime.state import QueryParamsProxy
 
 from coordinate import Coordinate
 from info_display import InfoDisplayDataLoadedState, InfoDisplayState, InfoDisplayLoadingState, \
     InvalidRoadSelectionsState, JunctionDisconnectedState, ShortestPathSuccessState
 from road_manager import RoadManager
 from ui_road import UIRoad
-
-import streamlit_folium
-import folium
 import constants
 from graph import Road, ShortestPathResult
-from shapely.geometry import MultiLineString, Point
 
 
 class StreamlitManager:
@@ -37,6 +37,9 @@ class StreamlitManager:
         Initialize StreamlitManager with the Ontario road network data and default display settings.
         """
         self._set_info_display_state(InfoDisplayLoadingState())
+
+        # note: spinners should best be in display method, but streamlit forces us to use
+        # spinner/loading indicator here with the business logic happening in context manager.
 
         with st.spinner('Loading and building graphs. This takes about 6 seconds.'):
 
@@ -74,7 +77,6 @@ class StreamlitManager:
             else:
                 self._road_average_length = 0
 
-            # TODO: remove console.log
             # this script uses set interval to periodically update the query params with latest bounds and zoom.
             # accessing them directly from st folium (or even trying to get their information by including
             # them in returned_objects field leads to horrible performance issues, as they force an app
@@ -111,7 +113,8 @@ class StreamlitManager:
 
     def _get_info_display_state(self) -> InfoDisplayState:
         """
-        TODO: write docstring
+        Return info_display_state from streamlit's session state. This is a small helper method
+
         Preconditions:
             - st.session_state.get('info_display_state') is not None
         """
@@ -119,65 +122,81 @@ class StreamlitManager:
 
     def _set_info_display_state(self, state: InfoDisplayState) -> None:
         """
-        TODO write docstring
+        Set info_display_state in streamlit's session state. This is a small helper method.
+
+        There are no preconditions to use this method.
         """
         st.session_state['info_display_state'] = state
 
     def _init_map_related_data(self) -> None:
         """
-        TODO: add docstring.
+        Initialize map related data, in particular empty selected roads, get roads from
+         road manager and mark every road as visible
+
         To clear any misconceptions, as we are using separation of concerns architecture, this
         method as a result *does not* fetch data, but only initializes data related to map
-        relevant to a Boundary class such as this (boundary class means that which the user interacts
+        relevant to a Boundary class such as this class (boundary class means that which the user interacts
         with directly). Fetching data is RoadManager class' job.
+
+        There are no preconditions to use this method.
         """
         self._roads = {}
         self._selected_roads = {}
 
-        roads: dict[str, Road] = self._road_manager.get_roads()
+        roads: dict[str, Road] = self._road_manager.get_roads()  # this does *not* result in file calls. This is
+        # just a getter method called.
 
         for road_id in roads:
             self._roads[road_id] = UIRoad(
                 road=roads[road_id],
                 visible=True,  # make every road visible, we will make the ones not in bound or too minor for
-                # current zoom in another method.
+                # current zoom invisible in another method.
                 colour=self._get_apt_colour_by_road_id(road_id)
             )
 
     def _get_apt_colour_by_road_id(self, road_id: str) -> str:
         """
-        Mutating method
+        Return colour as per road id as per the following legend:
+            - positive road: blue
+            - negative road: black
+            - unidirectional road: brown
 
-        TODO: write docstring
-        :return:
+        Preconditions:
+            - len(road_id) > 4
         """
         color: str
         end_four_chars: str = road_id[-4:]  # this is guaranteed to exist, since we always append a four letter
         # suffix to our road ids when building the graph.
 
         if end_four_chars == constants.ROAD_POSITIVE_SUFFIX:
-            color = 'blue'
+            color = constants.ROAD_POSITIVE_COLOR
         elif end_four_chars == constants.ROAD_NEGATIVE_SUFFIX:
-            color = 'black'
+            color = constants.ROAD_NEGATIVE_COLOR
         else:
             # it is a uni directional road
-            color = 'brown'
+            color = constants.ROAD_UNIDIRECTIONAL_COLOR
 
         return color
 
     def _get_road_id_by_selection(self, point: Coordinate) -> Optional[str]:
         """
-        Return the UIRoad whose geometric polyline is within a threshold distance
-        from the given point, or None if no visible road is close enough.
+        Return the road id whose geometric polyline is the closest to
+        point coordinate, or None if no visible road is close enough. This method
+        should only be called if a click is detected on a line, and we want to figure
+        out which line it is, and it should not be used to detect if a line was clicked upon
+        or not.
+
+        The None return is just for extreme rare edge cases: don't rely
+        on this returning None to figure out if a line was clicked upon or not.
 
         Preconditions:
-            -
+            - A line was clicked upon in the folium map
         """
         point_shape: Point = Point(point.latitude, point.longitude)
 
         infinity: int = constants.INFINITY  # of course if we came here
         # because something was clicked, the click distance will be less
-        # than 1 billion units.
+        # than 1 trillion units.
         min_distance: float = infinity
         min_road_id: Optional[str] = None
 
@@ -199,7 +218,7 @@ class StreamlitManager:
 
         if min_road_id is None:
             # this might happen if for some reason, our streamlit folium library messes up something,
-            # thus, we just return None, as if no road was selected.
+            # thus, we just return None instead of throwing errors, as if no road was selected.
             return None
         else:
             return min_road_id
@@ -207,28 +226,39 @@ class StreamlitManager:
     @cache_data
     def _compute_visible_roads_cached(_self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
         """
-        This is a cached version of _compute_visible_roads. Use this where possible.
-        Update the visible roads according to the given zoom level, the road will be invisible if all portions are
-        not in the current bounds or the road length is too minor to display. If the zoom level given is equal
-        to or greater than 13, all the roads should be visible that pass the aforementioned bound check.
+        Make roads visible and invisible according to the given zoom level and bounds. The road will be invisible
+        if all portions are not in the current bounds or the road length is too minor to display. If
+        the zoom level given is equal to or greater than 13, all the roads that pass the aforementioned bound
+        check would be visible.
+
+        NOTE: This is a cached version of _compute_visible_roads. Use this where possible. This means it does not
+        do anything if zoom_level or bounds don't change as compared to previous invoking of this method.
+
+        self is written as _self as Streamlit's @cache_data decorator ignores any argument having an underscore,
+        and this is important otherwise Streamlit will try to compute a hash of self, which would lead to errors.
 
         Preconditions:
             - constants.MIN_ZOOM <= zoom_level <= constants.MAX_ZOOM
-
-        TODO: explain why _self not self; and why bounds and zoom not used
+            - bounds' first coordinate represents northeast coordinates and the other one represents
+            southwest coordinates of a map's bounds
         """
         _self._compute_visible_roads(zoom_level=zoom_level, bounds=bounds)
 
     def _compute_visible_roads(self, zoom_level: int, bounds: tuple[Coordinate, Coordinate]) -> None:
         """
-        Update the visible roads according to the given zoom level, the road will be invisible if all portions are
-        not in the current bounds or the road length is too minor to display. If the zoom level given is equal
-        to or greater than 13, all the roads should be visible that pass the aforementioned bound check.
+        Make roads visible and invisible according to the given zoom level and bounds. The road will be invisible
+        if all portions are not in the current bounds or the road length is too minor to display. If
+        the zoom level given is equal to or greater than 13, all the roads that pass the aforementioned bound
+        check would be visible.
+
+        NOTE: this is not cached, and hence will update roads on every call (and this is an expensive method).
+        Don't call this except if no other option is available. Instead, always try to
+        use self._compute_visible_roads_cached.
 
         Preconditions:
             - constants.MIN_ZOOM <= zoom_level <= constants.MAX_ZOOM
-
-        TODO: explain why _self not self; and why bounds and zoom not used
+            - bounds' first coordinate represents northeast coordinates and the other one represents
+            southwest coordinates of a map's bounds
         """
 
         length_bound: float = (constants.MAX_ZOOM - zoom_level + 1) * self._road_average_length
@@ -243,8 +273,6 @@ class StreamlitManager:
         max_latitude: float = max(latitudes)
         min_latitude: float = min(latitudes)
 
-        total: int = 0
-
         # syntax of ValuesView seen from https://stackoverflow.com/a/58013168
         all_roads: ValuesView[UIRoad] = self._roads.values()
         delta: float = constants.LONGITUDE_TRANSLATION_DELTA
@@ -258,8 +286,7 @@ class StreamlitManager:
             # ignore how big or small a road is if the user is zoomed in enough, and thus show all roads
             # that pass the bounds check.
             length_check_passed: bool = (zoom_level >= constants.BIG_ENOUGH_ZOOM_THRESHOLD
-                                         or length >= length_bound or is_in_shortest_path
-                                         )
+                                         or length >= length_bound or is_in_shortest_path)
             bounds_check_passed: bool = False
 
             if length_check_passed:
@@ -267,8 +294,7 @@ class StreamlitManager:
                 # don't translate, if 1 then the road needs +ve translation,
                 # if -1 then negative translation
 
-                road_id: str = road.road_id
-                end_four_letters: str = road_id[-4:]  # guaranteed to exist, since we add road ids
+                end_four_letters: str = road.road_id[-4:]  # guaranteed to exist, since we add road ids
                 # with suffixes of 4 letters always
 
                 # no need to translate single directional roads
@@ -303,8 +329,9 @@ class StreamlitManager:
                              polyline_coordinate_latitude + (signed_delta * -1))
                         )
 
-                    if (min_latitude <= polyline_coordinate_latitude <= max_latitude and
-                            min_longitude <= polyline_coordinate_longitude <= max_longitude) or is_in_shortest_path:
+                    if (min_latitude <= polyline_coordinate_latitude <= max_latitude
+                       and min_longitude <= polyline_coordinate_longitude <= max_longitude) or is_in_shortest_path:
+
                         bounds_check_passed = True
                         # don't break, as we are also translating polylines
 
@@ -312,18 +339,18 @@ class StreamlitManager:
                     road.geometry = polyline_copy
 
             ui_road.visible = length_check_passed and bounds_check_passed
-            if ui_road.visible:
-                total += 1
-
-        print(f'Total visible roads now: {total} as per bounds {bounds}')
 
     def reset(self) -> None:
         """
-        Reset StreamlitManager to its initial state by clearing selections,
-        rebuilding the roads, and restoring the default display settings.
+        Reset StreamlitManager to its initial state by clearing selected roads,
+        restoring deleted roads, restoring all roads to their original colour and
+        recomputing visible roads by force. This method also sets info display state to
+        InfoDisplayDataLoadedState(), so any shortest path related information would get removed
+        from screen.
 
         Preconditions:
             - self._roads is initialized
+            - self._default_session_state_dict.get('map_info') is not None
         """
         self._init_map_related_data()
 
@@ -332,12 +359,14 @@ class StreamlitManager:
 
         zoom_and_bounds: tuple[int, tuple[Coordinate, Coordinate]] = self._get_current_zoom_and_bounds()
         # use non cached version since the cached one won't update if bounds or zoom don't change,
-        # whcih they haven't
+        # which they haven't
         self._compute_visible_roads(zoom_level=zoom_and_bounds[0], bounds=zoom_and_bounds[1])
 
     def _get_state_value_by_key(self, key: str) -> Any:
         """
-        TODO: write docstring
+        Return Streamlit session state's current value of key field, or from
+        self._default_session_state_dict if key is not currently in session state.
+
         Preconditions:
             - key in self._default_session_state_dict
         """
@@ -345,17 +374,18 @@ class StreamlitManager:
 
         if current_value_in_state is None:
             # this might happen if the key has yet not been inserted into session state
-            print('Returning default')
             return self._default_session_state_dict[key]
         else:
-            print('Returning current value')
             return current_value_in_state
 
     def _handle_map_events(self) -> None:
         """
-        TODO: write docstring
+        Handle any events that happen to the map, primarily when a polyline is clicked.
+        This is a callback method.
+
+        Preconditions:
+            - self._default_session_state_dict.get('map_info') is not None
         """
-        print('handling event')
 
         state_map_info: dict = self._get_state_value_by_key('map_info')
         last_clicked_object: Optional[dict] = state_map_info['last_object_clicked']
@@ -366,14 +396,23 @@ class StreamlitManager:
                 Coordinate(last_clicked_object['lat'], last_clicked_object['lng'])
             )
 
-            print(f'Road selected is: {selected_road_id}')
             if selected_road_id is not None:
-                selected_road = self._roads[selected_road_id]
+                selected_road: UIRoad = self._roads[selected_road_id]
                 selected_road.colour = constants.SELECTED_ROAD_COLOUR
                 road: Road = selected_road.road
                 self._selected_roads[selected_road_id] = road
 
     def _handle_compute_shortest_path(self) -> None:
+        """
+        Handle pressing of Compute Shortest Path button by checking if
+        shortest path can be computed with current selection of Roads, and if yes
+        then computing it and in both cases changing state as required.
+        This is a callback method.
+
+        Preconditions:
+            - self._road_manager has been initialized
+            - self._selected_roads has been initialized
+        """
         selected_roads: dict[str, Road] = self._selected_roads
 
         if len(selected_roads) == 0:
@@ -384,6 +423,8 @@ class StreamlitManager:
         self._set_info_display_state(InfoDisplayLoadingState())
 
         if isinstance(info_display_state, ShortestPathSuccessState):
+            # this happens if let's say previous shortest path algorithm had coloured some roads.
+
             shortest_paths: list[list[tuple[str, str]]] = info_display_state.shortest_paths
             for path in shortest_paths:
                 path_end_index: int = len(path) - 1
@@ -396,48 +437,69 @@ class StreamlitManager:
         removability_test_result: Optional[tuple[str, str]] = road_manager.check_removability(road_ids)
 
         if removability_test_result is not None:
-            source_and_end: tuple[str, str] = removability_test_result
-            source: str = source_and_end[0]
-            target: str = source_and_end[1]
+            source_road_id: str = removability_test_result[0]
+            target_road_id: str = removability_test_result[1]
 
             prev_shortest_distance: Optional[ShortestPathResult] = road_manager.get_shortest_path(
-                source_junction_id=source,
-                target_junction_id=target
+                source_junction_id=source_road_id,
+                target_junction_id=target_road_id
             )
 
             if prev_shortest_distance is None:
-                print('Road segments were already disconnected, this should not have passed the '
-                      'removability test. Still we will handle it gracefully instead of '
-                      'throwing an error.')
+                # Road segments were already disconnected this means. This should not have passed the
+                # removability test. Still we will handle it gracefully instead of
+                # throwing an error.
+
                 self._set_info_display_state(JunctionDisconnectedState())
             else:
                 shortest_distance_result: Optional[ShortestPathResult] = road_manager.remove_road_and_get_path(
                     road_ids=road_ids,
-                    source_junction_id=source,
-                    target_junction_id=target)
+                    source_junction_id=source_road_id,
+                    target_junction_id=target_road_id)
 
                 if shortest_distance_result is None:
                     self._set_info_display_state(JunctionDisconnectedState())
+                else:
+                    all_shortest_paths: list[list[tuple[str, str]]] = shortest_distance_result.all_shortest_paths
 
-                all_shortest_paths: list[list[tuple[str, str]]] = shortest_distance_result.all_shortest_paths
+                    self._mark_road_as_in_shortest_path(
+                        shortest_paths=all_shortest_paths,
+                        in_shortest_path_mark=True,
+                        prev_index=-1,
+                        index=0
+                    )
 
-                self._mark_road_as_in_shortest_path(
-                    shortest_paths=all_shortest_paths,
-                    in_shortest_path_mark=True,
-                    prev_index=-1,
-                    index=0
-                )
+                    first_shortest_path: list[tuple[str, str]] = all_shortest_paths[0]
 
-                self._set_info_display_state(ShortestPathSuccessState(
-                    prev_length=prev_shortest_distance.length,
-                    new_length=shortest_distance_result.length,
-                    shortest_paths=all_shortest_paths,
-                    start_junction_location=Coordinate(self._roads[all_shortest_paths[0][0][1]].road.geometry[0][1],
-                                                       self._roads[all_shortest_paths[0][0][1]].road.geometry[0][0]),
-                    end_junction_location=Coordinate(self._roads[all_shortest_paths[0][-2][1]].road.geometry[-1][1],
-                                                     self._roads[all_shortest_paths[0][-2][1]].road.geometry[-1][0]),
-                    path_displayed_index=0
-                ))
+                    start_road: UIRoad = self._roads[first_shortest_path[0][1]]  # first_shortest_path[0]
+                    # is guaranteed to exist, as every shortest path needs to have a beginning. Refer to
+                    # ShortestPathResult.all_shortest_paths for more details. The first element of tuple then is
+                    # the first road id of this shortest path.
+
+                    start_road_geometry_first: tuple[float, float] = start_road.road.geometry[0]  # guaranteed to
+                    # exist: each road has to have at least two elements in geometry to form a polyline/road
+
+                    end_road: UIRoad = self._roads[first_shortest_path[-2][1]]  # take second last, since last one
+                    # does not have a road, as it doesn't have a vertex. Refer to
+                    # ShortestPathResult.all_shortest_paths for more details. This is guaranteed to exist,
+                    # since every shortest path needs to have at least two vertices and hence 2 elements in
+                    # first_shortest_path. After that, the first element from tuple is the road id of the last
+                    # road id in shortest path.
+                    end_road_geometry_last: tuple[float, float] = end_road.road.geometry[-1]  # guaranteed to
+                    # exist: each road has to have at least two elements in geometry to form a polyline/road
+
+                    self._set_info_display_state(ShortestPathSuccessState(
+                        prev_length=prev_shortest_distance.length,
+                        new_length=shortest_distance_result.length,
+                        shortest_paths=all_shortest_paths,
+                        # 1st element is longitude, 2nd element is latitude, following our project and
+                        # file ontario_road_network.geojson data's natural order
+                        start_junction_location=Coordinate(start_road_geometry_first[1],
+                                                           start_road_geometry_first[0]),
+                        end_junction_location=Coordinate(end_road_geometry_last[1],
+                                                         end_road_geometry_last[0]),
+                        path_displayed_index=0
+                    ))
         else:
             self._set_info_display_state(InvalidRoadSelectionsState())
 
@@ -446,17 +508,24 @@ class StreamlitManager:
             in_shortest_path_mark: bool,
     ) -> None:
         """
-        TODO: docstring
+        Mark all roads that occur in shortest_paths current index as in_shortest_path_mark value.
+        If prev_index is not -1, then mark all roads in shortest_paths from prev_index as
+        invisible (useful to display new shortest path while disappearing the previous one).
+
+        - prev_index != index
+        - -1 <= prev_index < len(shortest_paths)
+        - 0 <= prev_index < len(shortest_paths)
+        - shortest_paths is a valid list of shortest path created after running Graph.compute_shortest_path()
         """
         to_display_shortest_path = shortest_paths[index]
         vertices_end_index: int = len(to_display_shortest_path) - 1
 
-        for index in range(0, vertices_end_index):
-            vertex: tuple[str, str] = to_display_shortest_path[index]
+        for vertex_index in range(0, vertices_end_index):
+            vertex: tuple[str, str] = to_display_shortest_path[vertex_index]
 
             road_id: str = vertex[1]
             road: UIRoad = self._roads[road_id]
-            road.visible = in_shortest_path_mark  # TODO: remove this
+            road.visible = in_shortest_path_mark
             road.colour = constants.SHORTEST_PATH_ROAD_COLOUR \
                 if in_shortest_path_mark else self._get_apt_colour_by_road_id(road_id)
 
@@ -467,9 +536,12 @@ class StreamlitManager:
 
     def _shift_to_next_shortest_path(self) -> None:
         """
+        Shift to next shortest path present in our info display state which is instance of ShortestPathSuccessState.
+        This also changes info display state to a newer version of ShortestPathSuccessState, with updated
+        index.
+
         Preconditions:
             - isinstance(ShortestPathSuccessState, self._get_info_display_state())
-        :return:
         """
         # cast syntax seen from https://stackoverflow.com/a/75010658
         info_display_state: ShortestPathSuccessState = cast(ShortestPathSuccessState, self._get_info_display_state())
@@ -489,16 +561,24 @@ class StreamlitManager:
             shortest_paths, prev_index=prev_index, index=next_index, in_shortest_path_mark=True
         )
 
+        # prevent mutation at distance.
         updated_info_display_state: ShortestPathSuccessState = deepcopy(info_display_state)
         updated_info_display_state.path_displayed_index = next_index
         self._set_info_display_state(updated_info_display_state)
 
     def _get_current_zoom_and_bounds(self) -> tuple[int, tuple[Coordinate, Coordinate]]:
         """
-        TODO
-        :return:
+        Return current zoom and map bounds either from query parameters (updated from javascript) or
+        from default values if they still have not been assigned.
+
+        Preconditions:
+            - self._default_session_state_dict.get('map_info') is not None
+
+        Postconditions:
+            - first element of tuple is zoom, second element of tuple is a tuple of Coordinates with first
+            one as north east coordinates and seconds one as south west coordinates
         """
-        query_params = st.query_params
+        query_params: QueryParamsProxy = st.query_params
 
         current_zoom_from_map: str = query_params.get('zoom')
 
@@ -537,9 +617,11 @@ class StreamlitManager:
         """
         Display anything which should be displayed using streamlit, as this method is the only method
         that gets rerun as streamlit runs the app from top down on any update.
+
+        There are no preconditions to run this method, apart from info_display_state being in correct
+        state as required by what should be displayed at that time.
         """
-        print('\nDisplayin')
-        info_display_state: InfoDisplayState = st.session_state['info_display_state']
+        info_display_state: InfoDisplayState = self._get_info_display_state()
 
         if isinstance(info_display_state, InfoDisplayLoadingState):
             # this is done to protect against data being accidently displayed while it is still being loaded,
@@ -547,7 +629,7 @@ class StreamlitManager:
             return
         elif isinstance(info_display_state, InfoDisplayDataLoadedState):
 
-            with (st.spinner('Building Map')):
+            with st.spinner('Building Map'):
 
                 # query_params = st.query_params
                 #
@@ -652,7 +734,7 @@ class StreamlitManager:
 
                 with columns[1]:
                     st.text(f'Roads Currently Selected: {len(self._selected_roads)}')
-                    st.button('Reload Polylines', on_click=lambda: print('clicked'))
+                    st.button('Reload Polylines')  # the display method will run automatically
                     st.button('Compute Shortest Path', on_click=self._handle_compute_shortest_path)
                     st.button('Reset', on_click=self.reset)
 
@@ -664,7 +746,6 @@ class StreamlitManager:
                             'polylines as per zoom has been done for performance reasons, as Python is '
                             'is quite slow on its own.')
 
-                    print(type(info_display_state))
                     if isinstance(info_display_state, ShortestPathSuccessState):
                         folium.Marker(
                             location=info_display_state.start_junction_location.to_tuple(),
@@ -724,5 +805,6 @@ if __name__ == '__main__':
         'max-line-length': 120,
         'disable': ['static_type_checker'],
         'extra-imports': ['coordinate', 'info_display', 'road_manager', 'ui_road', 'graph',
-                          'streamlit_folium', 'folium'],
+                          'streamlit_folium', 'folium', 'streamlit', 'shapely.geometry', 'collections.abc',
+                          'constants', 'copy'],
     })

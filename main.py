@@ -32,6 +32,4 @@ streamlit_manager.display()
 
 if __name__ == '__main__':
     # running this block is not the correct way to run our code. See project proposal.tex file for steps to operate.
-    print('If you are trying to run this program, then this is the wrong way to run it due to this project\'s '
-          'use of Streamlit. Please see project proposal.tex for special '
-          'instructions on how to run this project.')
+    pass

@@ -9,7 +9,7 @@ SESSION_STATE_STREAMLIT_MANAGER_KEY: str = 'streamlit_manager'
 
 ORN_FILE_NAME = 'ontario_road_network.geojson'
 
-MIN_ZOOM: int = 1
+MIN_ZOOM: int = 5
 MAX_ZOOM: int = 19
 INITIAL_ZOOM: int = 14
 

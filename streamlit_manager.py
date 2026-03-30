@@ -289,7 +289,7 @@ class StreamlitManager:
             southwest coordinates of a map's bounds
         """
 
-        length_bound: float = (constants.MAX_ZOOM - zoom_level + 1) * self._road_average_length
+        length_bound: float = (constants.MAX_ZOOM - zoom_level + 1) * self._road_average_length * 0.75
 
         northeast_candidate: Coordinate = bounds[0]
         southwest_candidate: Coordinate = bounds[1]
@@ -325,12 +325,10 @@ class StreamlitManager:
                 end_four_letters: str = road.road_id[-4:]  # guaranteed to exist, since we add road ids
                 # with suffixes of 4 letters always
 
-                # no need to translate single directional roads
-                if end_four_letters != '_one':
-                    if end_four_letters == '_pos':
-                        translation_factor = 1
-                    elif end_four_letters == '_neg':
-                        translation_factor = -1
+                if end_four_letters == '_pos':
+                    translation_factor = 1
+                elif end_four_letters == '_neg':
+                    translation_factor = -1
 
                 signed_delta: float = (delta * translation_factor) / 2
 
@@ -444,6 +442,8 @@ class StreamlitManager:
         selected_roads: dict[str, Road] = self._selected_roads
 
         if len(selected_roads) == 0:
+            st.toast('Please select at least a road to compute shortest path between start and end points of '
+                     'the road segment/segments.', duration='long')
             return
 
         info_display_state: InfoDisplayState = self._get_info_display_state()
@@ -662,6 +662,12 @@ class StreamlitManager:
         elif isinstance(info_display_state, InfoDisplayDataLoadedState):
 
             with st.spinner('Building Map'):
+
+                st.badge('Positive roads go south to north or west to east', color='blue')
+                st.badge('Negative roads go north to south or east to west', color='gray')
+                st.badge('Blue roads are positive roads and black roads are negative roads')
+                st.badge('Red roads are removed roads', color='red')
+                st.badge('Green roads are the ones that represent the shortest path when asked.', color='green')
 
                 zoom_and_bounds: tuple[int, tuple[Coordinate, Coordinate]] = self._get_current_zoom_and_bounds()
                 zoom: int = zoom_and_bounds[0]

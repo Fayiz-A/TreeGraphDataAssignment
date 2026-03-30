@@ -1,0 +1,15 @@
+# External python libraries used in this project:
+
+# Testing and code checking
+python-ta
+
+# Map display and interaction
+streamlit
+streamlit-folium
+folium
+
+# Geometry and click detection
+shapely
+
+# Data loading
+geojson

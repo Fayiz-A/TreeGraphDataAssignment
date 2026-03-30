@@ -15,7 +15,8 @@ import folium
 from shapely.geometry import MultiLineString, Point
 
 from coordinate import Coordinate
-from info_display import InfoDisplayDataLoadedState, InfoDisplayState, InfoDisplayLoadingState, \
+from fast_file_loader import FastGeoJsonFileLoader
+from info_display import InfoDisplayDataLoadedState, InfoDisplayErrorState, InfoDisplayState, InfoDisplayLoadingState, \
     InvalidRoadSelectionsState, JunctionDisconnectedState, ShortestPathSuccessState
 from road_manager import RoadManager
 from ui_road import UIRoad
@@ -79,55 +80,59 @@ class StreamlitManager:
             self._set_info_display_state(InfoDisplayLoadingState())
 
             self._road_manager = RoadManager()
+            data_fetched: bool = self._road_manager.fetch_data_and_build_graph(FastGeoJsonFileLoader(constants.ORN_FILE_NAME))
 
             self._set_info_display_state(InfoDisplayLoadingState())
 
-            self._init_map_related_data()
+            if data_fetched:
+                self._init_map_related_data()
 
-            total_length: float = 0
-            for key in self._roads:
-                ui_road: UIRoad = self._roads[key]
-                length: float = ui_road.road.length
-                total_length += length
+                total_length: float = 0
+                for key in self._roads:
+                    ui_road: UIRoad = self._roads[key]
+                    length: float = ui_road.road.length
+                    total_length += length
 
-            if len(self._roads) > 0:
-                self._road_average_length = total_length / len(self._roads)
+                if len(self._roads) > 0:
+                    self._road_average_length = total_length / len(self._roads)
+                else:
+                    self._road_average_length = 0
+
+                # this script uses set interval to periodically update the query params with latest bounds and zoom.
+                # accessing them directly from st folium (or even trying to get their information by including
+                # them in returned_objects field leads to horrible performance issues, as they force an app
+                # rerun if returned that way a lot of times). We can then extract the current map zoom
+                # and bounds value then from query params, that streamlit allows us to access.
+                st.html('''<script>
+                            setInterval(() => {
+                                if(window.frames['0'] != undefined && window.frames['0'].map != undefined) {
+                                    let mapObject = window.frames['0'].map
+                                    let zoom = mapObject.getZoom()
+                                    let bounds = mapObject.getBounds()
+        
+                                    // url setting code seen from https://stackoverflow.com/a/41542008
+                                    let modifiedURL = new URL(location.href);
+        
+                                    modifiedURL.searchParams.set('zoom', window.frames['0'].map.getZoom());
+        
+                                    let northEast = bounds['_northEast']
+                                    let southWest = bounds['_southWest']
+                                    modifiedURL.searchParams.set('neLat', northEast['lat'],);
+                                    modifiedURL.searchParams.set('neLng', northEast['lng'],);
+                                    modifiedURL.searchParams.set('swLat', southWest['lat'],);
+                                    modifiedURL.searchParams.set('swLng', southWest['lng'],);
+        
+                                    history.pushState(null, '', modifiedURL)
+                                }
+                            }, 100)
+                        </script>''',
+                        unsafe_allow_javascript=True  # this just means we trust our js code that we wrote, and are
+                        # not running something untrusted like from API or concatenating some input
+                        )
+                self._set_info_display_state(InfoDisplayDataLoadedState())
             else:
-                self._road_average_length = 0
-
-            # this script uses set interval to periodically update the query params with latest bounds and zoom.
-            # accessing them directly from st folium (or even trying to get their information by including
-            # them in returned_objects field leads to horrible performance issues, as they force an app
-            # rerun if returned that way a lot of times). We can then extract the current map zoom
-            # and bounds value then from query params, that streamlit allows us to access.
-            st.html('''<script>
-                        setInterval(() => {
-                            if(window.frames['0'] != undefined && window.frames['0'].map != undefined) {
-                                let mapObject = window.frames['0'].map
-                                let zoom = mapObject.getZoom()
-                                let bounds = mapObject.getBounds()
-    
-                                // url setting code seen from https://stackoverflow.com/a/41542008
-                                let modifiedURL = new URL(location.href);
-    
-                                modifiedURL.searchParams.set('zoom', window.frames['0'].map.getZoom());
-    
-                                let northEast = bounds['_northEast']
-                                let southWest = bounds['_southWest']
-                                modifiedURL.searchParams.set('neLat', northEast['lat'],);
-                                modifiedURL.searchParams.set('neLng', northEast['lng'],);
-                                modifiedURL.searchParams.set('swLat', southWest['lat'],);
-                                modifiedURL.searchParams.set('swLng', southWest['lng'],);
-    
-                                history.pushState(null, '', modifiedURL)
-                            }
-                        }, 100)
-                    </script>''',
-                    unsafe_allow_javascript=True  # this just means we trust our js code that we wrote, and are
-                    # not running something untrusted like from API or concatenating some input
-                    )
-
-            self._set_info_display_state(InfoDisplayDataLoadedState())
+                # problem opening data
+                self._set_info_display_state(InfoDisplayErrorState())
 
     def _get_info_display_state(self) -> InfoDisplayState:
         """
@@ -228,9 +233,9 @@ class StreamlitManager:
             # shapely takes coordinates in latitude, longitude order.
             multiline: MultiLineString = MultiLineString([[(coordinate[1], coordinate[0]) for coordinate in polyline]])
 
-            distance_from_clicked_coordinate: float = point_shape.distance(multiline)
+            dist_from_clicked_coordinate: float = point_shape.distance(multiline)
 
-            if distance_from_clicked_coordinate < min_distance:
+            if dist_from_clicked_coordinate < min_distance:
                 min_distance = point_shape.distance(multiline)
                 min_road_id = road.road_id
 
@@ -293,7 +298,7 @@ class StreamlitManager:
 
         # syntax of ValuesView seen from https://stackoverflow.com/a/58013168
         all_roads: ValuesView[UIRoad] = self._roads.values()
-        delta: float = constants.LONGITUDE_TRANSLATION_DELTA
+        delta: float = constants.TRANSLATION_DELTA
 
         for ui_road in all_roads:
             road: Road = ui_road.road
@@ -646,42 +651,12 @@ class StreamlitManager:
             # this is done to protect against data being accidently displayed while it is still being loaded,
             # in which case there are chances of error
             return
+        elif isinstance(info_display_state, InfoDisplayErrorState):
+            st.error('Error occurred while loading road network data from file. '
+                     f'Ensure that the file {constants.ORN_FILE_NAME} is on the correct path.')
         elif isinstance(info_display_state, InfoDisplayDataLoadedState):
 
             with st.spinner('Building Map'):
-
-                # query_params = st.query_params
-                #
-                # current_zoom_from_map: str = query_params.get('zoom')
-                #
-                # zoom: int
-                # state_map_info_bounds: dict
-                #
-                # if current_zoom_from_map is not None:
-                #     zoom = int(current_zoom_from_map)
-                #     # 'neLat' and other query params are
-                #     # guaranteed not to be null, as zoom and these values are set together, unless something
-                #     # terribly goes wrong in which case it is a situation of data corruption in general.
-                #     state_map_info_bounds = {
-                #         '_northEast': {
-                #             'lat': float(query_params.get('neLat')),
-                #             'lng': float(query_params.get('neLng'))
-                #         },
-                #         '_southWest': {
-                #             'lat': float(query_params.get('swLat')),
-                #             'lng': float(query_params.get('swLng'))
-                #         }
-                #     }
-                # else:
-                #     zoom = self._default_session_state_dict['map_info']['zoom']
-                #     state_map_info_bounds = self._default_session_state_dict['map_info']['bounds']
-                #
-                # north_east_bounds: dict = state_map_info_bounds['_northEast']
-                # south_west_bounds: dict = state_map_info_bounds['_southWest']
-                # bounds: tuple[Coordinate, Coordinate] = (
-                #     Coordinate(north_east_bounds['lat'], north_east_bounds['lng']),
-                #     Coordinate(south_west_bounds['lat'], south_west_bounds['lng'])
-                # )
 
                 zoom_and_bounds: tuple[int, tuple[Coordinate, Coordinate]] = self._get_current_zoom_and_bounds()
                 zoom: int = zoom_and_bounds[0]
@@ -693,13 +668,11 @@ class StreamlitManager:
 
                 south_west_bounds_lat: float = south_west_bounds.latitude
                 south_west_bounds_lng: float = south_west_bounds.longitude
-                north_east_bounds_lat: float = north_east_bounds.latitude
-                north_east_bounds_lng: float = north_east_bounds.longitude
 
                 # compute center of map from bounds, which is what location parameter takes below.
                 folium_map: folium.Map = folium.Map(location=(
-                    south_west_bounds_lat + ((north_east_bounds_lat - south_west_bounds_lat) / 2),
-                    south_west_bounds_lng + ((north_east_bounds_lng - south_west_bounds_lng) / 2)
+                    south_west_bounds_lat + ((north_east_bounds.latitude - south_west_bounds_lat) / 2),
+                    south_west_bounds_lng + ((north_east_bounds.longitude - south_west_bounds_lng) / 2)
                 ), zoom_start=zoom, max_zoom=constants.MAX_ZOOM, min_zoom=constants.MIN_ZOOM)
 
                 self._compute_visible_roads_cached(zoom_level=zoom, bounds=bounds)
@@ -776,20 +749,20 @@ class StreamlitManager:
                         ).add_to(folium_map)
 
                         total_shortest_paths: int = len(info_display_state.shortest_paths)
-                        multiple_shortest_paths_present: bool = total_shortest_paths > 1
+                        many_shortest_paths_present: bool = total_shortest_paths > 1
 
                         st.text('Shortest paths computed successfully.')
-                        st.text(f'There {'are' if multiple_shortest_paths_present else 'is'} in total '
+                        st.text(f'There {'are' if many_shortest_paths_present else 'is'} in total '
                                 f'{total_shortest_paths} shortest '
-                                f'path{'s' if multiple_shortest_paths_present else ''}.')
+                                f'path{'s' if many_shortest_paths_present else ''}.')
                         st.text(f'Displaying path number {info_display_state.path_displayed_index + 1} '
-                                f'out of {total_shortest_paths} path{'s' if multiple_shortest_paths_present else ''}')
+                                f'out of {total_shortest_paths} path{'s' if many_shortest_paths_present else ''}')
                         st.text('Previous length of shortest path before removal of road segment was '
                                 f'{info_display_state.prev_length} meters.')
                         st.text('Now, after removal, the length of shortest path '
                                 f'is  {info_display_state.new_length} meters.')
 
-                        if multiple_shortest_paths_present:
+                        if many_shortest_paths_present:
                             st.button('> Show another shortest path', on_click=self._shift_to_next_shortest_path)
 
                     elif isinstance(info_display_state, JunctionDisconnectedState):
@@ -826,5 +799,5 @@ if __name__ == '__main__':
         'max-nested-blocks': 4,
         'extra-imports': ['coordinate', 'info_display', 'road_manager', 'ui_road', 'graph',
                           'streamlit_folium', 'folium', 'streamlit', 'shapely.geometry', 'collections.abc',
-                          'constants', 'copy'],
+                          'constants', 'copy', 'fast_file_loader'],
     })

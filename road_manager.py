@@ -1,70 +1,57 @@
-import time
-
-from fast_file_loader import FastFileLoader
+"""
+This file contains code for the service class of this project RoadManager, whose job
+is to facilitate between Graph Domain level (Domain term from Uncle Bob) class and
+StreamlitManager boundary class.
+"""
+import doctest
 from typing import Optional
 
 from graph import Graph, ShortestPathResult, Road
 from data_loader import DataLoader
 from data_load_state import DataLoadState, DataLoadSuccessState
+import constants
 
 
 class RoadManager:
     """
-    A class that manages the road network graph. This is a service class,
+    A service class that indirectly manages the road network graph. This is a service class,
     meaning that it orchestrates and mediates between the boundary class
     (meaning class user directly interacts with) of StreamlitManager
-    and entity class (meaning a low level domain (from Uncle Bob's concepts
+    and entity class (meaning a low level domain (from Uncle Bob's concepts)
     class) of Graph
 
     Instance Attributes:
         - graph: a Graph instance that represents the Ontario road network.
 
     Representation Invariants:
-        - self.graph is not None
+        - self.graph represents the road network loaded from our Ontario Road Network data file
     """
     graph: Graph
 
     def __init__(self) -> None:
         """
-        Initialize RoadManager with the Ontario road network data.
+        Initialize RoadManager with empty graph.
+
+        There are no preconditions to use this constructor
         """
         self.graph = Graph()
-        self.fetch_data_and_build_graph(FastFileLoader('ontario_road_network.geojson'))
-        # TODO: replace with constant from constants.py
 
-    def fetch_data_and_build_graph(self, data_loader: DataLoader) -> None:
+    def fetch_data_and_build_graph(self, data_loader: DataLoader) -> bool:
         """
-        Fetch and build the road network graph using data_loader.
+        Fetch and build the road network graph using data_loader, and return if the graph
+        was fetched and built successfully or not.
 
-        There are no preconditions to use this function
+        There are no preconditions to use this method.
         """
-        start_time_all: float = time.perf_counter()
-
-        print('Starting data load')
-        load_time_start: float = time.perf_counter()
-
         result: DataLoadState = data_loader.load()
 
         if not isinstance(result, DataLoadSuccessState):
-            print('Failed to load Ontario road network data.')
-            return
+            return False
 
-        print(f'Data loaded in {time.perf_counter() - load_time_start}')
-
-        start_time: float = time.perf_counter()
-
-        data: dict = result.data
         graph: Graph = self.graph
-        features: list = data['features']
-        coordinates_length: int = 0
-
-        time_delta_2: float = 0
-        time_delta_3: float = 0
-        time_delta_4: float = 0
-        time_delta_5: float = 0
+        features: list = result.data['features']
 
         for feature in features:
-            time_start_4: float = time.perf_counter()
             attributes: dict = feature['attributes']
             from_id: str = str(attributes['FROM_JUNCTION_ID'])
             to_id: str = str(attributes['TO_JUNCTION_ID'])
@@ -75,44 +62,29 @@ class RoadManager:
             # which is quite significant as we are iterating over 600_000 times
             polyline: list[tuple[float, float]] = feature['geometry']['paths'][0]
 
-            time_start_5: float = time.perf_counter()
-            geometry: list[tuple[float, float]] = polyline
-
-            coordinates_length += len(polyline)
-            time_delta_5 += (time.perf_counter() - time_start_5)
-
-            time_delta_4 += (time.perf_counter() - time_start_4)
-            time_start_2: float = time.perf_counter()
-
             graph.add_junction(from_id)
             graph.add_junction(to_id)
 
-            time_delta_2 += (time.perf_counter() - time_start_2)
-
-            time_start_3: float = time.perf_counter()
+            pos_suffix: str = constants.ROAD_POSITIVE_SUFFIX
+            neg_suffix: str = constants.ROAD_NEGATIVE_SUFFIX
 
             if direction == 'Both':
-                graph.add_road(from_junction_id=from_id, to_junction_id=to_id, length=length, road_id=f'{road_id}_pos',
-                               removed=False, geometry=geometry)
-                graph.add_road(from_junction_id=to_id, to_junction_id=from_id, length=length, road_id=f'{road_id}_neg',
-                               removed=False, geometry=geometry[::-1])
+                graph.add_road(from_junction_id=from_id, to_junction_id=to_id,
+                               length=length, road_id=f'{road_id}{pos_suffix}',
+                               removed=False, geometry=polyline)
+                graph.add_road(from_junction_id=to_id, to_junction_id=from_id,
+                               length=length, road_id=f'{road_id}{neg_suffix}',
+                               removed=False, geometry=polyline[::-1])
             elif direction == 'Positive':
-                graph.add_road(from_junction_id=from_id, to_junction_id=to_id, length=length, road_id=f'{road_id}_one',
-                               removed=False, geometry=geometry)
+                graph.add_road(from_junction_id=from_id, to_junction_id=to_id,
+                               length=length, road_id=f'{road_id}{pos_suffix}',
+                               removed=False, geometry=polyline)
             elif direction == 'Negative':
-                # TODO: check if geometry reveral is fine or not
-                graph.add_road(from_junction_id=to_id, to_junction_id=from_id, length=length, road_id=f'{road_id}_one',
-                               removed=False, geometry=geometry[::-1])
-            else:
-                print(f'Unknown direction value: {direction} for road {road_id}')
+                graph.add_road(from_junction_id=to_id, to_junction_id=from_id, length=length,
+                               road_id=f'{road_id}{neg_suffix}',
+                               removed=False, geometry=polyline[::-1])
 
-            time_delta_3 += (time.perf_counter() - time_start_3)
-
-        end_time: float = time.perf_counter()
-
-        print(f'Whole of graph built in {end_time-start_time} seconds overall. add_junction method took {time_delta_2} seconds, and add_road method took {time_delta_3} seconds. The attribute extraction took {time_delta_4} seconds.')
-        print(f'The whole fetch_data_and_build_graph method took {time.perf_counter() - start_time_all}')
-        print(f'The geometry loop took {time_delta_5} seconds, and we had {coordinates_length} coordinates in total')
+        return True
 
     def restore_removed_roads(self) -> None:
         """
@@ -127,10 +99,11 @@ class RoadManager:
             self, road_ids: list[str], source_junction_id: str, target_junction_id: str
     ) -> Optional[ShortestPathResult]:
         """
-        Remove all roads in roads_id, and return a list of roads which make the shortest path from
-        source_junction_id to target_junction_id.
+        Remove all roads in roads_id (soft delete), and return ShortestPathResult after running
+        get_shortest_path or None if the junctions get disconnected after road removal.
 
         Preconditions:
+            - self.graph has been initialized
             - len(road_ids) > 0
             - source_junction_id in self.graph.vertices
             - target_junction_id in self.graph.vertices
@@ -143,13 +116,25 @@ class RoadManager:
 
     def get_shortest_path(self, source_junction_id: str, target_junction_id: str) -> Optional[ShortestPathResult]:
         """
-        TODO: write docstrings
+        Return ShortestPathResult with all shortest paths and shortest path length if
+        source_junction_id and target_junction_id are connected, otherwise return None.
+
+        Preconditions:
+            - self.graph has been initialized
+            - source_junction_id in self.graph.vertices
+            - target_junction_id in self.graph.vertices
+            - source_junction_id != target_junction_id
         """
         return self.graph.compute_shortest_path(source_junction_id, target_junction_id)
 
     def check_removability(self, roads: list[str]) -> Optional[tuple[str, str]]:
         """
-        TODO: complete docstring
+        Return a tuple if all roads satisfy the condition in
+        self.graph.is_valid_road_selection method (see its docstring for details) or None if
+        they don't. The tuple returned would have its first element as the start junction id
+        and second element as end junction id, where start and end are determined from the free
+        ends of the sequence of roads. See the aforementioned method for details.
+
         Preconditions:
             - len(roads) >= 2
         """
@@ -157,9 +142,20 @@ class RoadManager:
 
     def get_roads(self) -> dict[str, Road]:
         """
-        Return self.graph's roads.
+        Return self.graph's roads. This is a small helper method.
 
         Preconditions:
             - self.graph has been initialized
         """
         return self.graph.roads
+
+
+if __name__ == '__main__':
+    doctest.testmod(verbose=True)
+
+    import python_ta
+    python_ta.check_all(config={
+        'max-line-length': 120,
+        'disable': ['static_type_checker'],
+        'extra-imports': ['heapq', 'constants', 'graph', 'data_load_state', 'data_loader'],
+    })

@@ -5,7 +5,7 @@ Unit test suite for Graph.compute_shortest_path method using network x's dijktra
 import networkx as nx
 from random import random, randint
 
-from graph import Graph, ShortestPathResult, _Vertex
+from graph import Graph, ShortestPathResult, Vertex
 from math import isclose
 
 import timeit
@@ -55,7 +55,7 @@ def test_compute_shortest_path() -> None:
     shortest_path_matrix = dict(nx.all_pairs_dijkstra_path(nx_graph))
     shortest_path_length_matrix = dict(nx.all_pairs_dijkstra_path_length(nx_graph))
 
-    test_graph_vertices: dict[str, _Vertex] = test_graph.vertices
+    test_graph_vertices: dict[str, Vertex] = test_graph.vertices
 
     for start_vertex in test_graph_vertices:
         for end_vertex in test_graph_vertices:

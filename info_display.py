@@ -45,4 +45,4 @@ class InvalidRoadSelectionsState(InfoDisplayDataLoadedState):
 
 
 class InfoDisplayErrorState(InfoDisplayState):
-    error: str
+    pass

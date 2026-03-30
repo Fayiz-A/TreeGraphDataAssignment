@@ -1,17 +1,17 @@
 """
-This file is for storing all constants that are used in this program, including important keys
-for dictionaries
-TODO: Continue this
+This file is for storing all constants that are used in this program.
 """
 
 SESSION_STATE_STREAMLIT_MANAGER_KEY: str = 'streamlit_manager'
+
+ORN_FILE_NAME = 'ontario_road_network.geojson'
 
 MIN_ZOOM: int = 1
 MAX_ZOOM: int = 19
 INITIAL_ZOOM: int = 14
 
 BIG_ENOUGH_ZOOM_THRESHOLD: int = 13
-LONGITUDE_TRANSLATION_DELTA: float = 0.00002
+TRANSLATION_DELTA: float = 0.00002
 
 INFINITY: int = 1_000_000_000_000
 

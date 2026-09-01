@@ -17,8 +17,8 @@ import streamlit_folium
 import folium
 from shapely.geometry import MultiLineString, Point
 
+from compressed_geo_json_file_loader import CompressedGeoJsonFileLoader
 from coordinate import Coordinate
-from fast_geo_json_file_loader import FastGeoJsonFileLoader
 from info_display import InfoDisplayDataLoadedState, InfoDisplayErrorState, InfoDisplayState, InfoDisplayLoadingState, \
     InvalidRoadSelectionsState, JunctionDisconnectedState, ShortestPathSuccessState
 from road_manager import RoadManager
@@ -83,7 +83,7 @@ class StreamlitManager:
             self._set_info_display_state(InfoDisplayLoadingState())
 
             self._road_manager = RoadManager()
-            data_fetched: bool = self._road_manager.fetch_data_and_build_graph(FastGeoJsonFileLoader(
+            data_fetched: bool = self._road_manager.fetch_data_and_build_graph(CompressedGeoJsonFileLoader(
                 constants.ORN_FILE_NAME)
             )
 

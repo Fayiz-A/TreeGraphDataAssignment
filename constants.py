@@ -7,7 +7,7 @@ This file is for storing all constants that are used in this program.
 
 SESSION_STATE_STREAMLIT_MANAGER_KEY: str = 'streamlit_manager'
 
-ORN_FILE_NAME = 'ontario_road_network.geojson'
+ORN_FILE_NAME = 'ontario_roads_rounded.geojson'
 
 MIN_ZOOM: int = 5
 MAX_ZOOM: int = 19
